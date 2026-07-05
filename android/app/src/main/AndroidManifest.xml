@@ -5,10 +5,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <!-- Termux'a komut gonderebilmek icin -->
+    <!-- On plan servisi + wake lock (uygulama arka planda olmesin) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Zamanli bildirim -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Termux'a komut gonderme -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND"/>
 
-    <!-- Android 11+ paket gorunurlugu: uygulama acma + termux -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN"/>
@@ -36,6 +42,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Kalici on plan servisi -->
+        <service
+            android:name=".AgentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+
+        <!-- Zamanli bildirim alicisi -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false"/>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>

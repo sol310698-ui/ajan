@@ -1,5 +1,6 @@
 package com.sametdemiral.ajan
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -36,6 +37,16 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNeededPermissions()
+        startAgentService()
+    }
+
+    private fun startAgentService() {
+        val i = Intent(this, AgentService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(i)
+        } else {
+            startService(i)
+        }
     }
 
     private fun requestNeededPermissions() {
@@ -72,6 +83,12 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("body") ?: "",
                         result
                     )
+                    "scheduleNotification" -> scheduleNotification(
+                        call.argument<Int>("delaySeconds") ?: 60,
+                        call.argument<String>("title") ?: "Hatirlatma",
+                        call.argument<String>("body") ?: "",
+                        result
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -94,8 +111,9 @@ class MainActivity : FlutterActivity() {
                         if (isNotEmpty()) append("\n")
                         append(stderr.trimEnd())
                     }
-                    if (err != 0) {
-                        if (isNotEmpty()) append("\n")
+                    // err=-1 sadece cikis kodu bildirimidir; cikti varsa gurultu,
+                    // gosterme. Sadece cikti hic yoksa ve gercek hata varsa yaz.
+                    if (err != 0 && err != -1 && isEmpty()) {
                         append("[plugin hatasi err=" + err + " " + errmsg + "]")
                     }
                     if (isEmpty()) append("(komut bitti, cikti yok. exit=" + exitCode + ")")
@@ -171,6 +189,35 @@ class MainActivity : FlutterActivity() {
         main.post {
             timeouts.remove(id)?.let { main.removeCallbacks(it) }
             pending.remove(id)?.success(text)
+        }
+    }
+
+    private fun scheduleNotification(
+        delaySec: Int, title: String, body: String, result: MethodChannel.Result) {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val nid = (System.currentTimeMillis() % 100000).toInt()
+        val i = Intent(this, ReminderReceiver::class.java).apply {
+            putExtra("title", title)
+            putExtra("body", body)
+            putExtra("nid", nid)
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else
+            PendingIntent.FLAG_UPDATE_CURRENT
+        val pi = PendingIntent.getBroadcast(this, nid, i, flags)
+        val at = System.currentTimeMillis() + delaySec * 1000L
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                am.set(AlarmManager.RTC_WAKEUP, at, pi)
+                result.success("Bildirim ~" + delaySec + " sn sonraya planlandi (yaklasik).")
+            } else {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+                result.success("Bildirim " + delaySec + " sn sonraya planlandi.")
+            }
+        } catch (e: SecurityException) {
+            am.set(AlarmManager.RTC_WAKEUP, at, pi)
+            result.success("Bildirim planlandi (yaklasik).")
         }
     }
 

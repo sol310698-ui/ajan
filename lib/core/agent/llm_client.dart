@@ -1,19 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../../models/chat_message.dart';
 
-/// Gemini API istemcisi (function calling destekli).
+/// Gemini API istemcisi (function calling + otomatik yeniden deneme).
 ///
-/// generateContent endpoint'ini kullanir. Modelin donusu ya duz metin,
-/// ya da bir/birden fazla functionCall icerir.
+/// Telefon uykuya girince veya ag anlik koparsa istek dusebilir; bu durumda
+/// birkac kez otomatik tekrar dener, boylece kullaniciya hata yansimaz.
 class LlmClient {
   final String apiKey;
   final String model;
+  final int maxRetries;
 
   LlmClient({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash',
+    this.model = 'gemini-2.5-flash',
+    this.maxRetries = 3,
   });
 
   Uri get _endpoint => Uri.parse(
@@ -21,19 +24,12 @@ class LlmClient {
         '$model:generateContent?key=$apiKey',
       );
 
-  /// Bir tur konusma yapar.
-  ///
-  /// [history] tum sohbet gecmisi (system haric).
-  /// [systemPrompt] ajan davranis talimati.
-  /// [toolDeclarations] araclarin Gemini semasi.
-  ///
-  /// Donen ChatMessage ya text tasir ya da toolCalls tasir.
   Future<ChatMessage> send({
     required List<ChatMessage> history,
     required String systemPrompt,
     required List<Map<String, dynamic>> toolDeclarations,
   }) async {
-    final body = {
+    final body = jsonEncode({
       'systemInstruction': {
         'parts': [
           {'text': systemPrompt}
@@ -43,29 +39,57 @@ class LlmClient {
       'tools': [
         {'functionDeclarations': toolDeclarations}
       ],
-      'generationConfig': {
-        'temperature': 0.4,
-      },
-    };
+      'generationConfig': {'temperature': 0.4},
+    });
 
-    final res = await http.post(
-      _endpoint,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
+    Object? lastErr;
+    for (var attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final res = await http
+            .post(_endpoint,
+                headers: {'Content-Type': 'application/json'}, body: body)
+            .timeout(const Duration(seconds: 45));
 
-    if (res.statusCode != 200) {
-      return ChatMessage(
-        role: Role.assistant,
-        text: 'API HATASI ${res.statusCode}: ${res.body}',
-      );
+        // 5xx / 429 -> gecici, tekrar denemeye deger.
+        if (res.statusCode >= 500 || res.statusCode == 429) {
+          lastErr = 'API ${res.statusCode}';
+          await _backoff(attempt);
+          continue;
+        }
+        if (res.statusCode != 200) {
+          return ChatMessage(
+            role: Role.assistant,
+            text: 'API HATASI ${res.statusCode}: ${res.body}',
+          );
+        }
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return _parseResponse(data);
+      } on SocketException catch (e) {
+        // Ag kopmasi / uyku -> tekrar dene.
+        lastErr = e;
+        await _backoff(attempt);
+      } on HttpException catch (e) {
+        lastErr = e;
+        await _backoff(attempt);
+      } on IOException catch (e) {
+        lastErr = e;
+        await _backoff(attempt);
+      }
     }
 
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return _parseResponse(data);
+    return ChatMessage(
+      role: Role.assistant,
+      text: 'Baglanti kurulamadi ($maxRetries deneme). '
+          'Internet dusuk gorunuyor, birazdan tekrar dene. [$lastErr]',
+    );
   }
 
-  /// Sohbet gecmisini Gemini "contents" formatina cevirir.
+  Future<void> _backoff(int attempt) async {
+    // 0.8s, 1.6s, 3.2s ...
+    final ms = (800 * (1 << attempt)).clamp(800, 6000);
+    await Future.delayed(Duration(milliseconds: ms));
+  }
+
   List<Map<String, dynamic>> _toContents(List<ChatMessage> history) {
     final out = <Map<String, dynamic>>[];
     for (final m in history) {
@@ -114,9 +138,7 @@ class LlmClient {
     if (candidates == null || candidates.isEmpty) {
       return ChatMessage(role: Role.assistant, text: '(bos yanit)');
     }
-    final parts =
-        (candidates.first['content']?['parts'] as List?) ?? const [];
-
+    final parts = (candidates.first['content']?['parts'] as List?) ?? const [];
     final buffer = StringBuffer();
     final calls = <ToolCall>[];
     var callIndex = 0;
@@ -133,7 +155,6 @@ class LlmClient {
         ));
       }
     }
-
     return ChatMessage(
       role: Role.assistant,
       text: buffer.toString().trim(),

@@ -1,4 +1,5 @@
 import '../tools/device_tools.dart';
+import '../tools/schedule_tools.dart';
 import '../tools/shell_tool.dart';
 import '../tools/tool.dart';
 
@@ -13,6 +14,7 @@ class ToolRegistry {
       SendSmsTool(),
       LocationTool(),
       NotifyTool(),
+      ScheduleNotificationTool(),
     ]);
   }
 
@@ -24,7 +26,6 @@ class ToolRegistry {
 
   Tool? byName(String name) => _tools[name];
 
-  /// Gemini'ye gonderilecek functionDeclarations listesi.
   List<Map<String, dynamic>> get declarations =>
       _tools.values.map((t) => t.toDeclaration()).toList();
 }
