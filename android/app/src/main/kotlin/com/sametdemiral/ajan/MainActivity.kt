@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -28,7 +29,25 @@ class MainActivity : FlutterActivity() {
     private val idGen = AtomicInteger(1000)
 
     private val resultAction = "com.sametdemiral.ajan.TERMUX_RESULT"
+    private val runCommandPermission = "com.termux.permission.RUN_COMMAND"
+    private val reqRunCommand = 2001
     private var receiver: BroadcastReceiver? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requestNeededPermissions()
+    }
+
+    private fun requestNeededPermissions() {
+        val want = mutableListOf<String>()
+        if (checkSelfPermission(runCommandPermission) != PackageManager.PERMISSION_GRANTED)
+            want.add(runCommandPermission)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                != PackageManager.PERMISSION_GRANTED)
+            want.add("android.permission.POST_NOTIFICATIONS")
+        if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), reqRunCommand)
+    }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -96,6 +115,13 @@ class MainActivity : FlutterActivity() {
     private fun runTermux(command: String, timeoutSec: Int, result: MethodChannel.Result) {
         if (command.isBlank()) { result.success("HATA: bos komut."); return }
 
+        if (checkSelfPermission(runCommandPermission) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(runCommandPermission), reqRunCommand)
+            result.success("Termux izni henuz verilmemis. Ekranda cikan izin " +
+                "penceresinde IZIN VER de, sonra komutu tekrar dene.")
+            return
+        }
+
         val id = idGen.incrementAndGet()
         pending[id] = result
 
@@ -129,15 +155,13 @@ class MainActivity : FlutterActivity() {
                 startService(intent)
             }
         } catch (e: Exception) {
-            complete(id, "HATA: Termux baslatilamadi (" + e.message + "). " +
-                "Termux (F-Droid surumu) kurulu mu? allow-external-apps=true mi?")
+            complete(id, "HATA: Termux baslatilamadi (" + e.message + ").")
             return
         }
 
         val to = Runnable {
             complete(id, "HATA: Termux sonucu " + timeoutSec + " sn icinde donmedi. " +
-                "Termux acik mi ve allow-external-apps=true mi? " +
-                "(Play Store degil, F-Droid/GitHub surumu olmali.)")
+                "Termux acik mi ve allow-external-apps=true mi?")
         }
         timeouts[id] = to
         main.postDelayed(to, timeoutSec * 1000L)
