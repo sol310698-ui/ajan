@@ -1,0 +1,85 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # Repo sadece lib/ + android ozel dosyalari iceriyorsa,
+      # eksik gradle/ios iskeletini flutter create ile tamamla.
+      - name: Proje iskeletini tamamla
+        run: |
+          if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
+            echo "Gradle bulunamadi -> flutter create ile tamamlaniyor"
+            mkdir -p /tmp/base
+            flutter create --org com.sametdemiral --project-name ajan --platforms android /tmp/base
+            # Uretilen iskeleti kopyala AMA bizim lib/, pubspec, manifest, kotlin dosyalarini KORU
+            cp -rn /tmp/base/android/. android/ 2>/dev/null || true
+            cp -n /tmp/base/analysis_options.yaml . 2>/dev/null || true
+            cp -n /tmp/base/.metadata . 2>/dev/null || true
+          fi
+
+      - name: Kotlin coroutines bagimliligini garantiye al
+        run: |
+          GRADLE=android/app/build.gradle
+          if [ -f "$GRADLE" ] && ! grep -q "kotlinx-coroutines-android" "$GRADLE"; then
+            sed -i '/dependencies {/a\    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"' "$GRADLE"
+          fi
+
+      - name: applicationId'yi ayarla
+        run: |
+          GRADLE=android/app/build.gradle
+          if [ -f "$GRADLE" ]; then
+            sed -i 's/applicationId "[^"]*"/applicationId "com.sametdemiral.ajan"/' "$GRADLE"
+          fi
+
+      - name: Bagimliliklar
+        run: flutter pub get
+
+      - name: Keystore'u coz (opsiyonel imzalama)
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/app/release.keystore
+          cat > android/key.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: APK uret (arm64)
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: APK'yi yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ajan-arm64-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      # Etiketli push'ta otomatik Release olustur (opsiyonel)
+      - name: Release'e ekle
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
