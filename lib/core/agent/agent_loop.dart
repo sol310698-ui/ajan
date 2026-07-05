@@ -46,33 +46,7 @@ class AgentLoop {
 
       // Cagrilan tum araclari calistir, sonuclari gecmise ekle.
       for (final call in reply.toolCalls) {
-        final tool = registry.byName(call.name);
-        final ToolResult result;
-        if (tool == null) {
-          result = ToolResult(
-            callId: call.id,
-            name: call.name,
-            ok: false,
-            output: 'Bilinmeyen arac: ${call.name}',
-          );
-        } else {
-          try {
-            final output = await tool.run(call.args);
-            result = ToolResult(
-              callId: call.id,
-              name: call.name,
-              ok: true,
-              output: output,
-            );
-          } catch (e) {
-            result = ToolResult(
-              callId: call.id,
-              name: call.name,
-              ok: false,
-              output: 'Arac hatasi: $e',
-            );
-          }
-        }
+        final result = await _execute(call);
         final toolMsg = ChatMessage(role: Role.tool, toolResult: result);
         history.add(toolMsg);
         onEvent(toolMsg);
@@ -86,5 +60,34 @@ class AgentLoop {
     );
     history.add(stop);
     onEvent(stop);
+  }
+
+  /// Tek bir arac cagrisini calistirir ve sonucu dondurur.
+  Future<ToolResult> _execute(ToolCall call) async {
+    final tool = registry.byName(call.name);
+    if (tool == null) {
+      return ToolResult(
+        callId: call.id,
+        name: call.name,
+        ok: false,
+        output: 'Bilinmeyen arac: ${call.name}',
+      );
+    }
+    try {
+      final output = await tool.run(call.args);
+      return ToolResult(
+        callId: call.id,
+        name: call.name,
+        ok: true,
+        output: output,
+      );
+    } catch (e) {
+      return ToolResult(
+        callId: call.id,
+        name: call.name,
+        ok: false,
+        output: 'Arac hatasi: $e',
+      );
+    }
   }
 }
