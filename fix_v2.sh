@@ -1,3 +1,68 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Ajan v2 duzeltme: eksik metotlar + wakelock tutarliligi
+set -e
+cd ~/ajan_repo
+
+cat > lib/core/native/native_tools.dart << 'FIXEOF1'
+import 'package:flutter/services.dart';
+
+/// Native Android islemleri icin kopru (Kotlin MainActivity ile eslesir).
+class NativeTools {
+  static const _ch = MethodChannel('ajan/native');
+
+  static Future<String> openApp(String query) async {
+    final r = await _ch.invokeMethod<String>('openApp', {'query': query});
+    return r ?? 'ok';
+  }
+
+  static Future<String> sendSms(String number, String message) async {
+    final r = await _ch.invokeMethod<String>('sendSms', {
+      'number': number,
+      'message': message,
+    });
+    return r ?? 'ok';
+  }
+
+  static Future<String> getLocation() async {
+    final r = await _ch.invokeMethod<String>('getLocation');
+    return r ?? 'bilinmiyor';
+  }
+
+  static Future<String> notify(String title, String body) async {
+    final r = await _ch.invokeMethod<String>('notify', {
+      'title': title,
+      'body': body,
+    });
+    return r ?? 'ok';
+  }
+
+  static Future<String> scheduleNotification(
+      int delaySeconds, String title, String body) async {
+    final r = await _ch.invokeMethod<String>('scheduleNotification', {
+      'delaySeconds': delaySeconds,
+      'title': title,
+      'body': body,
+    });
+    return r ?? 'ok';
+  }
+
+  /// Gorev basladiginda cagrilir: CPU'yu uyanik tutar (wake lock).
+  static Future<void> startAgentTask() async {
+    try {
+      await _ch.invokeMethod('startAgentTask');
+    } catch (_) {}
+  }
+
+  /// Gorev bitince cagrilir: wake lock birakilir (batarya).
+  static Future<void> stopAgentTask() async {
+    try {
+      await _ch.invokeMethod('stopAgentTask');
+    } catch (_) {}
+  }
+}
+FIXEOF1
+
+cat > android/app/src/main/kotlin/com/sametdemiral/ajan/MainActivity.kt << 'FIXEOF2'
 package com.sametdemiral.ajan
 
 import android.app.AlarmManager
@@ -292,3 +357,71 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 }
+FIXEOF2
+
+cat > android/app/src/main/kotlin/com/sametdemiral/ajan/AgentService.kt << 'FIXEOF3'
+package com.sametdemiral.ajan
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
+
+/**
+ * Kalici on plan servisi. Amac: uygulama arka planda / ekran kapaliyken
+ * oldurulmesin ve ag istekleri Doze kisitlamasindan etkilenmesin.
+ *
+ * Wake lock BURADA tutulmaz (batarya icin). CPU'yu uyanik tutma isi
+ * MainActivity'de gorev basina yapilir (startAgentTask/stopAgentTask).
+ *
+ * START_STICKY: sistem oldururse yeniden baslatir.
+ */
+class AgentService : Service() {
+    private val chId = "ajan_service"
+    private val notifId = 42
+
+    override fun onCreate() {
+        super.onCreate()
+        startForeground(notifId, buildNotification())
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    private fun buildNotification(): Notification {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(chId, "Ajan Servisi",
+                NotificationManager.IMPORTANCE_LOW)
+            ch.setShowBadge(false)
+            nm.createNotificationChannel(ch)
+        }
+        val open = packageManager.getLaunchIntentForPackage(packageName)
+        val pi = PendingIntent.getActivity(
+            this, 0, open,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                PendingIntent.FLAG_IMMUTABLE else 0
+        )
+        return NotificationCompat.Builder(this, chId)
+            .setContentTitle("Ajan aktif")
+            .setContentText("Arka planda calismaya hazir.")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+}
+FIXEOF3
+
+echo "=== Duzeltildi ==="
+wc -l lib/core/native/native_tools.dart android/app/src/main/kotlin/com/sametdemiral/ajan/MainActivity.kt android/app/src/main/kotlin/com/sametdemiral/ajan/AgentService.kt

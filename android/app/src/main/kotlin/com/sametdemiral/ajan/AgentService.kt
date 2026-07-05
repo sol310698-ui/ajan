@@ -9,26 +9,24 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 /**
  * Kalici on plan servisi. Amac: uygulama arka planda / ekran kapaliyken
- * oldurulmesin ve ag istekleri kesilmesin.
+ * oldurulmesin ve ag istekleri Doze kisitlamasindan etkilenmesin.
  *
- * - Kalici bir bildirim gosterir (Android sarti).
- * - Kismi wake lock tutar: CPU uyusa bile ajan calismaya devam eder.
- * - START_STICKY: sistem oldururse yeniden baslatir.
+ * Wake lock BURADA tutulmaz (batarya icin). CPU'yu uyanik tutma isi
+ * MainActivity'de gorev basina yapilir (startAgentTask/stopAgentTask).
+ *
+ * START_STICKY: sistem oldururse yeniden baslatir.
  */
 class AgentService : Service() {
-    private var wakeLock: PowerManager.WakeLock? = null
     private val chId = "ajan_service"
     private val notifId = 42
 
     override fun onCreate() {
         super.onCreate()
         startForeground(notifId, buildNotification())
-        acquireWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -57,19 +55,6 @@ class AgentService : Service() {
             .setContentIntent(pi)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
-
-    private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK, "ajan:agent"
-        ).apply { setReferenceCounted(false); acquire() }
-    }
-
-    override fun onDestroy() {
-        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
-        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

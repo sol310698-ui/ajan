@@ -30,7 +30,6 @@ class NativeTools {
     return r ?? 'ok';
   }
 
-  /// [delaySeconds] saniye sonra bir bildirim planlar (AlarmManager).
   static Future<String> scheduleNotification(
       int delaySeconds, String title, String body) async {
     final r = await _ch.invokeMethod<String>('scheduleNotification', {
@@ -39,5 +38,19 @@ class NativeTools {
       'body': body,
     });
     return r ?? 'ok';
+  }
+
+  /// Gorev basladiginda cagrilir: CPU'yu uyanik tutar (wake lock).
+  static Future<void> startAgentTask() async {
+    try {
+      await _ch.invokeMethod('startAgentTask');
+    } catch (_) {}
+  }
+
+  /// Gorev bitince cagrilir: wake lock birakilir (batarya).
+  static Future<void> stopAgentTask() async {
+    try {
+      await _ch.invokeMethod('stopAgentTask');
+    } catch (_) {}
   }
 }
