@@ -2,37 +2,45 @@ package com.sametdemiral.ajan
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.IntentFilter
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.telephony.SmsManager
 import androidx.annotation.NonNull
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : FlutterActivity() {
     private val channel = "ajan/native"
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val main = Handler(Looper.getMainLooper())
+
+    private val pending = HashMap<Int, MethodChannel.Result>()
+    private val timeouts = HashMap<Int, Runnable>()
+    private val idGen = AtomicInteger(1000)
+
+    private val resultAction = "com.sametdemiral.ajan.TERMUX_RESULT"
+    private var receiver: BroadcastReceiver? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        registerTermuxReceiver()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "termuxRun" -> {
-                        val cmd = call.argument<String>("command") ?: ""
-                        val timeout = call.argument<Int>("timeoutSec") ?: 60
-                        runTermux(cmd, timeout, result)
-                    }
+                    "termuxRun" -> runTermux(
+                        call.argument<String>("command") ?: "",
+                        call.argument<Int>("timeoutSec") ?: 60,
+                        result
+                    )
                     "openApp" -> openApp(call.argument<String>("query") ?: "", result)
                     "sendSms" -> sendSms(
                         call.argument<String>("number") ?: "",
@@ -50,34 +58,68 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    /**
-     * Termux'a RUN_COMMAND intent'i ile komut gonderir.
-     * Cikti paylasilan bir dosyaya yazilir, sonra okunur (dosya-kopru yontemi).
-     *
-     * Gereksinim: Termux'ta allow-external-apps=true olmali.
-     */
-    private fun runTermux(command: String, timeoutSec: Int, result: MethodChannel.Result) {
-        // Ciktinin yazilacagi ortak dosya (Termux HOME altinda).
-        val outName = "ajan_out_${System.currentTimeMillis()}.txt"
-        val termuxHome = "/data/data/com.termux/files/home"
-        val outPath = "$termuxHome/$outName"
-        // Uygulamamizin da okuyabilecegi paylasilan yol.
-        val sharedOut = File(getExternalFilesDir(null), outName)
+    private fun registerTermuxReceiver() {
+        receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val id = intent?.getIntExtra("exec_id", -1) ?: -1
+                val bundle: Bundle? = intent?.getBundleExtra("result")
+                val stdout = bundle?.getString("stdout") ?: ""
+                val stderr = bundle?.getString("stderr") ?: ""
+                val err = bundle?.getInt("err", 0) ?: 0
+                val errmsg = bundle?.getString("errmsg") ?: ""
+                val exitCode = bundle?.getInt("exitCode", -1) ?: -1
 
-        // Komutu sarmala: stdout+stderr'i dosyaya yaz, sonra shared alana kopyala.
-        val wrapped =
-            "{ $command ; } > \"$outPath\" 2>&1 ; " +
-            "cp \"$outPath\" \"${sharedOut.absolutePath}\" 2>/dev/null ; " +
-            "cat \"$outPath\""
+                val text = buildString {
+                    if (stdout.isNotBlank()) append(stdout.trimEnd())
+                    if (stderr.isNotBlank()) {
+                        if (isNotEmpty()) append("\n")
+                        append(stderr.trimEnd())
+                    }
+                    if (err != 0) {
+                        if (isNotEmpty()) append("\n")
+                        append("[plugin hatasi err=" + err + " " + errmsg + "]")
+                    }
+                    if (isEmpty()) append("(komut bitti, cikti yok. exit=" + exitCode + ")")
+                }
+                complete(id, text)
+            }
+        }
+        val filter = IntentFilter(resultAction)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(receiver, filter)
+        }
+    }
+
+    private fun runTermux(command: String, timeoutSec: Int, result: MethodChannel.Result) {
+        if (command.isBlank()) { result.success("HATA: bos komut."); return }
+
+        val id = idGen.incrementAndGet()
+        pending[id] = result
+
+        val callback = Intent(resultAction).apply {
+            setPackage(packageName)
+            putExtra("exec_id", id)
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        else
+            PendingIntent.FLAG_UPDATE_CURRENT
+        val pi = PendingIntent.getBroadcast(this, id, callback, flags)
 
         val intent = Intent().apply {
             setClassName("com.termux", "com.termux.app.RunCommandService")
             action = "com.termux.RUN_COMMAND"
-            putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
-            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", wrapped))
-            putExtra("com.termux.RUN_COMMAND_WORKDIR", termuxHome)
+            putExtra("com.termux.RUN_COMMAND_PATH",
+                "/data/data/com.termux/files/usr/bin/bash")
+            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", command))
+            putExtra("com.termux.RUN_COMMAND_WORKDIR",
+                "/data/data/com.termux/files/home")
             putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
             putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
+            putExtra("com.termux.RUN_COMMAND_PENDING_INTENT", pi)
         }
 
         try {
@@ -87,63 +129,44 @@ class MainActivity : FlutterActivity() {
                 startService(intent)
             }
         } catch (e: Exception) {
-            result.success("HATA: Termux baslatilamadi (${e.message}). " +
-                "Termux kurulu mu ve allow-external-apps=true mi?")
+            complete(id, "HATA: Termux baslatilamadi (" + e.message + "). " +
+                "Termux (F-Droid surumu) kurulu mu? allow-external-apps=true mi?")
             return
         }
 
-        // Cikti dosyasini bekleyerek oku.
-        scope.launch {
-            val output = withContext(Dispatchers.IO) {
-                val deadline = System.currentTimeMillis() + timeoutSec * 1000L
-                var lastSize = -1L
-                var stableCount = 0
-                while (System.currentTimeMillis() < deadline) {
-                    if (sharedOut.exists()) {
-                        val size = sharedOut.length()
-                        if (size == lastSize) {
-                            stableCount++
-                            // Boyut 2 kez ust uste ayni -> yazma bitti say.
-                            if (stableCount >= 2) break
-                        } else {
-                            stableCount = 0
-                            lastSize = size
-                        }
-                    }
-                    delay(400)
-                }
-                if (sharedOut.exists()) {
-                    val text = sharedOut.readText()
-                    sharedOut.delete()
-                    if (text.isBlank()) "(komut bitti, cikti yok)" else text
-                } else {
-                    "HATA: Cikti alinamadi (sure asimi veya izin). " +
-                        "Termux ayarinda allow-external-apps=true olmali."
-                }
-            }
-            result.success(output)
+        val to = Runnable {
+            complete(id, "HATA: Termux sonucu " + timeoutSec + " sn icinde donmedi. " +
+                "Termux acik mi ve allow-external-apps=true mi? " +
+                "(Play Store degil, F-Droid/GitHub surumu olmali.)")
+        }
+        timeouts[id] = to
+        main.postDelayed(to, timeoutSec * 1000L)
+    }
+
+    private fun complete(id: Int, text: String) {
+        main.post {
+            timeouts.remove(id)?.let { main.removeCallbacks(it) }
+            pending.remove(id)?.success(text)
         }
     }
 
     private fun openApp(query: String, result: MethodChannel.Result) {
         val pm = packageManager
-        // Once paket adi olarak dene.
         var launch = pm.getLaunchIntentForPackage(query)
         if (launch == null) {
-            // Uygulama adiyla eslesme ara.
             val apps = pm.getInstalledApplications(0)
             val match = apps.firstOrNull {
-                pm.getApplicationLabel(it).toString().equals(query, true) ||
-                    pm.getApplicationLabel(it).toString().contains(query, true)
+                val label = pm.getApplicationLabel(it).toString()
+                label.equals(query, true) || label.contains(query, true)
             }
             if (match != null) launch = pm.getLaunchIntentForPackage(match.packageName)
         }
         if (launch != null) {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(launch)
-            result.success("acildi: $query")
+            result.success("acildi: " + query)
         } else {
-            result.success("bulunamadi: $query")
+            result.success("bulunamadi: " + query)
         }
     }
 
@@ -152,9 +175,9 @@ class MainActivity : FlutterActivity() {
             @Suppress("DEPRECATION")
             val sms = SmsManager.getDefault()
             sms.sendTextMessage(number, null, message, null, null)
-            result.success("SMS gonderildi: $number")
+            result.success("SMS gonderildi: " + number)
         } catch (e: Exception) {
-            result.success("SMS hatasi: ${e.message}")
+            result.success("SMS hatasi: " + e.message)
         }
     }
 
@@ -163,8 +186,7 @@ class MainActivity : FlutterActivity() {
         val chId = "ajan_default"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(chId, "Ajan", NotificationManager.IMPORTANCE_DEFAULT)
-            )
+                NotificationChannel(chId, "Ajan", NotificationManager.IMPORTANCE_DEFAULT))
         }
         val n = NotificationCompat.Builder(this, chId)
             .setContentTitle(title)
@@ -173,5 +195,10 @@ class MainActivity : FlutterActivity() {
             .build()
         nm.notify(System.currentTimeMillis().toInt(), n)
         result.success("bildirim gosterildi")
+    }
+
+    override fun onDestroy() {
+        receiver?.let { runCatching { unregisterReceiver(it) } }
+        super.onDestroy()
     }
 }
