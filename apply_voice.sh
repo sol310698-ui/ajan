@@ -1,3 +1,171 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Ajan: sesli konusma (STT giris + TTS cikis + hiz ayari)
+set -e
+cd ~/ajan_repo
+mkdir -p lib/core/voice lib/ui android/app/src/main
+
+cat > pubspec.yaml << 'VOEOF1'
+name: ajan
+description: "Dusunebilen, telefonda komut calistirabilen kisisel yapay zeka ajani."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  uuid: ^4.5.0
+  intl: ^0.19.0
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+VOEOF1
+
+cat > lib/core/voice/voice_service.dart << 'VOEOF2'
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+
+const _kRate = 'tts_rate';
+const _kAutoSpeak = 'tts_auto';
+
+class VoiceState {
+  final bool sttReady;
+  final bool listening;
+  final bool speaking;
+  final double rate; // 0.1 - 1.0 (konusma hizi)
+  final bool autoSpeak; // gelen cevaplari otomatik seslendir
+
+  VoiceState({
+    this.sttReady = false,
+    this.listening = false,
+    this.speaking = false,
+    this.rate = 0.5,
+    this.autoSpeak = true,
+  });
+
+  VoiceState copyWith({
+    bool? sttReady,
+    bool? listening,
+    bool? speaking,
+    double? rate,
+    bool? autoSpeak,
+  }) =>
+      VoiceState(
+        sttReady: sttReady ?? this.sttReady,
+        listening: listening ?? this.listening,
+        speaking: speaking ?? this.speaking,
+        rate: rate ?? this.rate,
+        autoSpeak: autoSpeak ?? this.autoSpeak,
+      );
+}
+
+/// Sesli giris (STT) ve sesli cikis (TTS) yonetimi.
+class VoiceController extends StateNotifier<VoiceState> {
+  VoiceController() : super(VoiceState()) {
+    _init();
+  }
+
+  final SpeechToText _stt = SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+
+  Future<void> _init() async {
+    final p = await SharedPreferences.getInstance();
+    final rate = p.getDouble(_kRate) ?? 0.5;
+    final auto = p.getBool(_kAutoSpeak) ?? true;
+
+    await _tts.setLanguage('tr-TR');
+    await _tts.setSpeechRate(rate);
+    await _tts.setPitch(1.0);
+    _tts.setStartHandler(() => state = state.copyWith(speaking: true));
+    _tts.setCompletionHandler(() => state = state.copyWith(speaking: false));
+    _tts.setCancelHandler(() => state = state.copyWith(speaking: false));
+
+    bool ok = false;
+    try {
+      ok = await _stt.initialize(
+        onError: (e) => debugPrint('STT error: $e'),
+        onStatus: (s) {
+          if (s == 'done' || s == 'notListening') {
+            state = state.copyWith(listening: false);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('STT init fail: $e');
+    }
+
+    state = state.copyWith(sttReady: ok, rate: rate, autoSpeak: auto);
+  }
+
+  /// Mikrofonu dinlemeye baslar; taninan metni [onText] ile dondurur.
+  Future<void> startListening(void Function(String) onText) async {
+    if (!state.sttReady) {
+      await _init();
+      if (!state.sttReady) return;
+    }
+    if (state.listening) return;
+    await stopSpeaking();
+    state = state.copyWith(listening: true);
+    await _stt.listen(
+      localeId: 'tr_TR',
+      onResult: (r) {
+        onText(r.recognizedWords);
+        if (r.finalResult) state = state.copyWith(listening: false);
+      },
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 3),
+    );
+  }
+
+  Future<void> stopListening() async {
+    await _stt.stop();
+    state = state.copyWith(listening: false);
+  }
+
+  /// Metni sesli okur (autoSpeak kapaliysa yine de manuel cagrilabilir).
+  Future<void> speak(String text) async {
+    if (text.trim().isEmpty) return;
+    await _tts.stop();
+    await _tts.speak(text);
+  }
+
+  Future<void> stopSpeaking() async {
+    await _tts.stop();
+    state = state.copyWith(speaking: false);
+  }
+
+  Future<void> setRate(double rate) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble(_kRate, rate);
+    await _tts.setSpeechRate(rate);
+    state = state.copyWith(rate: rate);
+  }
+
+  Future<void> setAutoSpeak(bool v) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kAutoSpeak, v);
+    state = state.copyWith(autoSpeak: v);
+  }
+}
+
+final voiceProvider =
+    StateNotifierProvider<VoiceController, VoiceState>((ref) => VoiceController());
+VOEOF2
+
+cat > lib/ui/chat_screen.dart << 'VOEOF3'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -309,3 +477,81 @@ class _InputBar extends StatelessWidget {
     );
   }
 }
+VOEOF3
+
+cat > android/app/src/main/AndroidManifest.xml << 'VOEOF4'
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- On plan servisi + wake lock (uygulama arka planda olmesin) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Zamanli bildirim -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Termux'a komut gonderme -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND"/>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+        </intent>
+        <package android:name="com.termux"/>
+        <!-- Sesli giris (speech_to_text) ve seslendirme (TTS) -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <package android:name="com.google.android.googlequicksearchbox"/>
+    </queries>
+
+    <application
+        android:label="Ajan"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"/>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Kalici on plan servisi -->
+        <service
+            android:name=".AgentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+
+        <!-- Zamanli bildirim alicisi -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false"/>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+    </application>
+</manifest>
+VOEOF4
+
+echo "=== Sesli konusma eklendi ==="
+wc -l pubspec.yaml lib/core/voice/voice_service.dart lib/ui/chat_screen.dart
+echo "Simdi: git add -A && git commit -m ses && git push"
