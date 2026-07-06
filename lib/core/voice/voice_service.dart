@@ -55,6 +55,7 @@ class VoiceController extends StateNotifier<VoiceState> {
     await _tts.setLanguage('tr-TR');
     await _tts.setSpeechRate(rate);
     await _tts.setPitch(1.0);
+    await _tts.setQueueMode(1); // QUEUE_ADD: ara adimlar ust uste binmez, sirayla okunur
     _tts.setStartHandler(() => state = state.copyWith(speaking: true));
     _tts.setCompletionHandler(() => state = state.copyWith(speaking: false));
     _tts.setCancelHandler(() => state = state.copyWith(speaking: false));
@@ -101,11 +102,11 @@ class VoiceController extends StateNotifier<VoiceState> {
     state = state.copyWith(listening: false);
   }
 
-  /// Metni sesli okur (autoSpeak kapaliysa yine de manuel cagrilabilir).
+  /// Metni sesli okur. Sira modunda oldugu icin ara adimlar birbirini kesmez.
   Future<void> speak(String text) async {
-    if (text.trim().isEmpty) return;
-    await _tts.stop();
-    await _tts.speak(text);
+    final t = text.trim();
+    if (t.isEmpty) return;
+    await _tts.speak(t);
   }
 
   Future<void> stopSpeaking() async {

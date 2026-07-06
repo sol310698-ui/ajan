@@ -1,7 +1,10 @@
+import '../tools/confirm_tool.dart';
 import '../tools/device_tools.dart';
 import '../tools/schedule_tools.dart';
+import '../tools/screen_tool.dart';
 import '../tools/shell_tool.dart';
 import '../tools/tool.dart';
+import '../tools/ui_tool.dart';
 
 /// Tum araclarin kayit merkezi. Yeni yetenek eklemek = buraya bir satir.
 class ToolRegistry {
@@ -15,6 +18,9 @@ class ToolRegistry {
       LocationTool(),
       NotifyTool(),
       ScheduleNotificationTool(),
+      CreateUiTool(),
+      ScreenControlTool(),
+      ConfirmTool(),
     ]);
   }
 

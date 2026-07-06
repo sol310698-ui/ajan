@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/native/automation.dart';
 import '../core/voice/voice_service.dart';
 import '../models/chat_message.dart';
 import '../providers/agent_provider.dart';
@@ -27,6 +28,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final text = _input.text;
     if (text.trim().isEmpty) return;
     _input.clear();
+    ref.read(voiceProvider.notifier).stopSpeaking();
     ref.read(agentProvider.notifier).sendUserMessage(text);
     _scrollDown();
   }
@@ -57,18 +59,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  /// Gorev bitince son asistan cevabini sesli oku (autoSpeak acikken).
+  int _spokenCount = 0;
+
+  /// Yeni gelen her asistan metnini (ara adimlar dahil) sirayla seslendirir.
   void _maybeSpeak(AgentState? prev, AgentState next) {
-    final finished = (prev?.busy ?? false) && !next.busy;
-    if (!finished) return;
-    if (!ref.read(voiceProvider).autoSpeak) return;
-    final last = next.messages.lastWhere(
-      (m) => m.role == Role.assistant && m.text.trim().isNotEmpty,
-      orElse: () => ChatMessage(role: Role.assistant),
-    );
-    if (last.text.trim().isNotEmpty) {
-      ref.read(voiceProvider.notifier).speak(last.text);
+    if (!ref.read(voiceProvider).autoSpeak) {
+      _spokenCount = next.messages.length;
+      return;
     }
+    // Sohbet temizlendiyse sayaci sifirla.
+    if (next.messages.length < _spokenCount) _spokenCount = 0;
+    final vc = ref.read(voiceProvider.notifier);
+    for (var i = _spokenCount; i < next.messages.length; i++) {
+      final m = next.messages[i];
+      if (m.role == Role.assistant && m.text.trim().isNotEmpty) {
+        vc.speak(m.text);
+      }
+    }
+    _spokenCount = next.messages.length;
   }
 
   @override
@@ -199,6 +207,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     onPressed: () =>
                         vc.speak('Merhaba, ben senin ajaninim. Bu bir hiz denemesi.'),
                   ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Ekran kontrolu',
+                    style: TextStyle(color: Color(0xFF9E9CB8))),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.accessibility_new, size: 18),
+                  label: const Text('Erisilebilirligi ac'),
+                  onPressed: () => Automation.openAccessibilitySettings(),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.bubble_chart, size: 18),
+                        label: const Text('Yuzen buton'),
+                        onPressed: () async {
+                          if (!await Automation.hasOverlayPermission()) {
+                            await Automation.requestOverlayPermission();
+                          } else {
+                            await Automation.overlayStart();
+                          }
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      tooltip: 'Yuzen butonu kapat',
+                      onPressed: () => Automation.overlayStop(),
+                    ),
+                  ],
                 ),
               ],
             ),
