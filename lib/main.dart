@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/app_nav.dart';
 import 'ui/chat_screen.dart';
 
 void main() {
@@ -15,6 +16,7 @@ class AjanApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ajan',
       debugShowCheckedModeBanner: false,
+      navigatorKey: appNavigatorKey,
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,

@@ -107,6 +107,56 @@ class MainActivity : FlutterActivity() {
                     )
                     "startAgentTask" -> { acquireWakeLock(); result.success("ok") }
                     "stopAgentTask" -> { releaseWakeLock(); result.success("ok") }
+                    "screenRead" -> result.success(
+                        AjanAccessibilityService.instance?.readScreen()
+                            ?: "Erisim servisi kapali. Ayarlar > Erisilebilirlik > Ajan'i ac.")
+                    "screenTap" -> {
+                        val ok = AjanAccessibilityService.instance
+                            ?.tapText(call.argument<String>("text") ?: "") ?: false
+                        result.success(if (ok) "tiklandi" else "bulunamadi/erisim kapali")
+                    }
+                    "screenType" -> {
+                        val ok = AjanAccessibilityService.instance
+                            ?.setText(call.argument<String>("text") ?: "") ?: false
+                        result.success(if (ok) "yazildi" else "yazilabilir alan yok/erisim kapali")
+                    }
+                    "screenScroll" -> {
+                        val fwd = (call.argument<String>("direction") ?: "down") != "up"
+                        val ok = AjanAccessibilityService.instance?.scroll(fwd) ?: false
+                        result.success(if (ok) "kaydirildi" else "kaydirilabilir alan yok")
+                    }
+                    "screenGlobal" -> {
+                        val ok = AjanAccessibilityService.instance
+                            ?.doGlobal(call.argument<String>("action") ?: "") ?: false
+                        result.success(if (ok) "yapildi" else "erisim kapali")
+                    }
+                    "isAccessibilityOn" ->
+                        result.success(AjanAccessibilityService.instance != null)
+                    "openAccessibilitySettings" -> {
+                        startActivity(Intent(android.provider.Settings
+                            .ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success("ok")
+                    }
+                    "hasOverlayPermission" ->
+                        result.success(android.provider.Settings.canDrawOverlays(this))
+                    "requestOverlayPermission" -> {
+                        startActivity(Intent(android.provider.Settings
+                            .ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:$packageName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success("ok")
+                    }
+                    "overlayStart" -> {
+                        if (android.provider.Settings.canDrawOverlays(this)) {
+                            startService(Intent(this, OverlayService::class.java))
+                            result.success("ok")
+                        } else result.success("izin yok")
+                    }
+                    "overlayStop" -> {
+                        stopService(Intent(this, OverlayService::class.java))
+                        result.success("ok")
+                    }
                     else -> result.notImplemented()
                 }
             }
