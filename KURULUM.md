@@ -98,3 +98,36 @@ Chat'e yaz:
 2. `tool_registry.dart` icinde `_register([...])` listesine ekle.
 3. Bitti — model otomatik gorur ve kullanir.
 ```
+
+## Kapsamli ozellikler (v3)
+
+### Coklu model / saglayici
+Ayarlardan **saglayici** secilebilir: Google Gemini, OpenAI (GPT), Anthropic
+(Claude). Her saglayici icin ayri API anahtari ve model saklanir; saglayici
+degistirince anahtarlar kaybolmaz. Ilgili istemciler:
+`core/agent/{gemini,openai,anthropic}_client.dart`, ortak arayuz
+`llm_client.dart` (LlmClient) + fabrika `LlmClient.create(...)`.
+
+### Hafiza + coklu sohbet
+- Sohbetler cihazda **kalici** saklanir (`core/store/conversation_store.dart`);
+  uygulama kapanip acilinca kaybolmaz. Sol menuden (drawer) birden fazla sohbet
+  acilir, gecis yapilir, silinir.
+- **Uzun sureli hafiza** (`core/store/memory_store.dart`): ajan `remember`,
+  `recall`, `forget` araclariyla kullaniciyi/tercihleri kalici hatirlar ve her
+  sohbete sistem talimatiyla enjekte eder. Drawer > **Hafiza** ekranindan elle
+  de duzenlenebilir.
+
+### Daha fazla cihaz araci
+`core/tools/device_extra_tools.dart` + native `MainActivity.kt`:
+pano (clipboard), batarya, cihaz bilgisi, el feneri, arama yapma (make_call),
+rehber (read_contacts), SMS okuma (read_sms), takvim etkinligi, uygulama
+listesi, ses seviyesi, titresim, URL/ayar ekrani acma.
+Yeni izinler manifest'te: READ_CONTACTS, READ_SMS, CALL_PHONE, VIBRATE.
+
+### Proaktif / otonom rutinler
+`create_routine` / `list_routines` / `cancel_routine` araclari +
+`providers/routine_provider.dart` + `core/store/routine_store.dart`.
+"Her sabah 8'de hava durumunu bildir" gibi tekrar eden veya tek seferlik
+otonom gorevler; zamani gelince ajan gorevi arka planda calistirir ve sonucu
+bildirim olarak gonderir. Native `WakeReceiver` exact-alarm ile cihazi
+uyandirir. Drawer > **Rutinler** ekranindan yonetilir.

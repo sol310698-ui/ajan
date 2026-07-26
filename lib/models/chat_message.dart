@@ -7,6 +7,14 @@ class ToolCall {
   final Map<String, dynamic> args;
 
   ToolCall({required this.id, required this.name, required this.args});
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'args': args};
+
+  factory ToolCall.fromJson(Map<String, dynamic> j) => ToolCall(
+        id: (j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        args: Map<String, dynamic>.from(j['args'] ?? const {}),
+      );
 }
 
 /// Bir aracin calisma sonucu.
@@ -22,6 +30,16 @@ class ToolResult {
     required this.ok,
     required this.output,
   });
+
+  Map<String, dynamic> toJson() =>
+      {'callId': callId, 'name': name, 'ok': ok, 'output': output};
+
+  factory ToolResult.fromJson(Map<String, dynamic> j) => ToolResult(
+        callId: (j['callId'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        ok: j['ok'] == true,
+        output: (j['output'] ?? '').toString(),
+      );
 }
 
 /// Sohbetteki tek bir mesaj. Hem UI hem de LLM gecmisi icin kullanilir.
@@ -46,4 +64,27 @@ class ChatMessage {
   }) : time = time ?? DateTime.now();
 
   bool get hasToolCalls => toolCalls.isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+        'role': role.name,
+        'text': text,
+        'toolCalls': toolCalls.map((c) => c.toJson()).toList(),
+        'toolResult': toolResult?.toJson(),
+        'time': time.toIso8601String(),
+      };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
+        role: Role.values.firstWhere(
+          (r) => r.name == j['role'],
+          orElse: () => Role.assistant,
+        ),
+        text: (j['text'] ?? '').toString(),
+        toolCalls: ((j['toolCalls'] as List?) ?? const [])
+            .map((e) => ToolCall.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+        toolResult: j['toolResult'] == null
+            ? null
+            : ToolResult.fromJson(Map<String, dynamic>.from(j['toolResult'])),
+        time: DateTime.tryParse((j['time'] ?? '').toString()) ?? DateTime.now(),
+      );
 }

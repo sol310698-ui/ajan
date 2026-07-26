@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/agent/llm_client.dart';
 import '../core/native/automation.dart';
 import '../core/voice/voice_service.dart';
 import '../models/chat_message.dart';
 import '../providers/agent_provider.dart';
+import 'memory_screen.dart';
+import 'routines_screen.dart';
 import 'widgets/message_widgets.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -67,7 +70,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _spokenCount = next.messages.length;
       return;
     }
-    // Sohbet temizlendiyse sayaci sifirla.
     if (next.messages.length < _spokenCount) _spokenCount = 0;
     final vc = ref.read(voiceProvider.notifier);
     for (var i = _spokenCount; i < next.messages.length; i++) {
@@ -90,9 +92,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0F),
+      drawer: _buildDrawer(state),
       appBar: AppBar(
         backgroundColor: const Color(0xFF11111B),
-        title: const Text('Ajan'),
+        title: Text(state.current?.title ?? 'Ajan',
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (!state.hasKey)
             const Padding(
@@ -106,8 +110,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onPressed: () => ref.read(voiceProvider.notifier).stopSpeaking(),
             ),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => ref.read(agentProvider.notifier).clearChat(),
+            icon: const Icon(Icons.add_comment_outlined),
+            tooltip: 'Yeni sohbet',
+            onPressed: () => ref.read(agentProvider.notifier).newConversation(),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -145,15 +150,112 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Widget _buildDrawer(AgentState state) {
+    final notifier = ref.read(agentProvider.notifier);
+    return Drawer(
+      backgroundColor: const Color(0xFF11111B),
+      child: SafeArea(
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.smart_toy_outlined, color: Color(0xFF6C5CE7)),
+                  SizedBox(width: 10),
+                  Text('Ajan',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add, color: Color(0xFF6C5CE7)),
+              title: const Text('Yeni sohbet',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                notifier.newConversation();
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.schedule, color: Color(0xFF6C5CE7)),
+              title: const Text('Rutinler',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RoutinesScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.psychology, color: Color(0xFF6C5CE7)),
+              title:
+                  const Text('Hafiza', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const MemoryScreen()));
+              },
+            ),
+            const Divider(color: Color(0xFF2A2A3A)),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sohbetler',
+                    style: TextStyle(color: Color(0xFF6E6C8A), fontSize: 13)),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                children: state.conversations.map((c) {
+                  final selected = c.id == state.currentId;
+                  return ListTile(
+                    selected: selected,
+                    selectedTileColor: const Color(0xFF1E1E2E),
+                    title: Text(c.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFFB9B7CE))),
+                    onTap: () {
+                      notifier.switchConversation(c.id);
+                      Navigator.pop(context);
+                    },
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close,
+                          size: 18, color: Color(0xFF6E6C8A)),
+                      onPressed: () => notifier.deleteConversation(c.id),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openSettings() {
     final notifier = ref.read(agentProvider.notifier);
-    final keyCtrl = TextEditingController();
-    final modelCtrl = TextEditingController(text: notifier.model);
     showDialog(
       context: context,
       builder: (_) => Consumer(builder: (ctx, r, __) {
+        final state = r.watch(agentProvider);
         final voice = r.watch(voiceProvider);
         final vc = r.read(voiceProvider.notifier);
+        final provider = state.provider;
+        final keyCtrl = TextEditingController(text: notifier.settings.apiKey);
+        final modelCtrl =
+            TextEditingController(text: notifier.settings.model);
         return AlertDialog(
           backgroundColor: const Color(0xFF1E1E2E),
           title: const Text('Ayarlar', style: TextStyle(color: Colors.white)),
@@ -162,12 +264,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text('Model saglayici',
+                    style: TextStyle(color: Color(0xFF9E9CB8))),
+                DropdownButton<LlmProvider>(
+                  value: provider,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF1E1E2E),
+                  style: const TextStyle(color: Colors.white),
+                  items: LlmProvider.values
+                      .map((p) => DropdownMenuItem(
+                          value: p, child: Text(p.label)))
+                      .toList(),
+                  onChanged: (p) {
+                    if (p != null) {
+                      notifier.saveSettings(provider: p);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: keyCtrl,
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Gemini API Anahtari',
-                    hintText: 'AIza...',
+                  decoration: InputDecoration(
+                    labelText: '${provider.label} API Anahtari',
+                    hintText: provider.keyHint,
                   ),
                   obscureText: true,
                 ),
@@ -175,7 +295,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 TextField(
                   controller: modelCtrl,
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(labelText: 'Model'),
+                  decoration: InputDecoration(
+                    labelText: 'Model',
+                    hintText: provider.defaultModel,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const Text('Ses', style: TextStyle(color: Color(0xFF9E9CB8))),
@@ -204,8 +327,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: TextButton.icon(
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Dene'),
-                    onPressed: () =>
-                        vc.speak('Merhaba, ben senin ajaninim. Bu bir hiz denemesi.'),
+                    onPressed: () => vc.speak(
+                        'Merhaba, ben senin ajaninim. Bu bir hiz denemesi.'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -249,7 +372,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
             FilledButton(
               onPressed: () {
-                notifier.saveKey(keyCtrl.text, model: modelCtrl.text);
+                notifier.saveSettings(
+                    apiKey: keyCtrl.text, model: modelCtrl.text);
                 Navigator.pop(ctx);
               },
               child: const Text('Kaydet'),

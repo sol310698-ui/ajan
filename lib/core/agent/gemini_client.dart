@@ -1,0 +1,118 @@
+import 'dart:convert';
+
+import '../../models/chat_message.dart';
+import 'llm_client.dart';
+
+/// Google Gemini API istemcisi (function calling).
+class GeminiClient extends LlmClient {
+  GeminiClient({
+    required String apiKey,
+    String model = 'gemini-2.5-flash',
+    int maxRetries = 3,
+  }) : super(apiKey: apiKey, model: model, maxRetries: maxRetries);
+
+  Uri get _endpoint => Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/'
+        '$model:generateContent?key=$apiKey',
+      );
+
+  @override
+  Future<ChatMessage> send({
+    required List<ChatMessage> history,
+    required String systemPrompt,
+    required List<Map<String, dynamic>> toolDeclarations,
+  }) {
+    final body = jsonEncode({
+      'systemInstruction': {
+        'parts': [
+          {'text': systemPrompt}
+        ]
+      },
+      'contents': _toContents(history),
+      'tools': [
+        {'functionDeclarations': toolDeclarations}
+      ],
+      'generationConfig': {'temperature': 0.4},
+    });
+
+    return HttpRetry.post(
+      url: _endpoint,
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+      maxRetries: maxRetries,
+      parse: _parseResponse,
+    );
+  }
+
+  List<Map<String, dynamic>> _toContents(List<ChatMessage> history) {
+    final out = <Map<String, dynamic>>[];
+    for (final m in history) {
+      switch (m.role) {
+        case Role.user:
+          out.add({
+            'role': 'user',
+            'parts': [
+              {'text': m.text}
+            ]
+          });
+          break;
+        case Role.assistant:
+          final parts = <Map<String, dynamic>>[];
+          if (m.text.isNotEmpty) parts.add({'text': m.text});
+          for (final c in m.toolCalls) {
+            parts.add({
+              'functionCall': {'name': c.name, 'args': c.args}
+            });
+          }
+          if (parts.isNotEmpty) out.add({'role': 'model', 'parts': parts});
+          break;
+        case Role.tool:
+          final r = m.toolResult!;
+          out.add({
+            'role': 'user',
+            'parts': [
+              {
+                'functionResponse': {
+                  'name': r.name,
+                  'response': {'result': r.output},
+                }
+              }
+            ]
+          });
+          break;
+        case Role.system:
+          break;
+      }
+    }
+    return out;
+  }
+
+  ChatMessage _parseResponse(Map<String, dynamic> data) {
+    final candidates = data['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) {
+      return ChatMessage(role: Role.assistant, text: '(bos yanit)');
+    }
+    final parts = (candidates.first['content']?['parts'] as List?) ?? const [];
+    final buffer = StringBuffer();
+    final calls = <ToolCall>[];
+    var callIndex = 0;
+
+    for (final p in parts) {
+      if (p is! Map) continue;
+      if (p['text'] != null) buffer.write(p['text']);
+      if (p['functionCall'] != null) {
+        final fc = p['functionCall'] as Map;
+        calls.add(ToolCall(
+          id: 'call_${callIndex++}',
+          name: (fc['name'] ?? '').toString(),
+          args: Map<String, dynamic>.from(fc['args'] ?? {}),
+        ));
+      }
+    }
+    return ChatMessage(
+      role: Role.assistant,
+      text: buffer.toString().trim(),
+      toolCalls: calls,
+    );
+  }
+}

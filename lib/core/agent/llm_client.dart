@@ -3,54 +3,119 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../../models/chat_message.dart';
+import 'anthropic_client.dart';
+import 'gemini_client.dart';
+import 'openai_client.dart';
 
-/// Gemini API istemcisi (function calling + otomatik yeniden deneme).
+/// Desteklenen LLM saglayicilari.
+enum LlmProvider { gemini, openai, anthropic }
+
+extension LlmProviderX on LlmProvider {
+  String get id => name;
+
+  String get label {
+    switch (this) {
+      case LlmProvider.gemini:
+        return 'Google Gemini';
+      case LlmProvider.openai:
+        return 'OpenAI (GPT)';
+      case LlmProvider.anthropic:
+        return 'Anthropic (Claude)';
+    }
+  }
+
+  /// Ayarlarda onerilen varsayilan model.
+  String get defaultModel {
+    switch (this) {
+      case LlmProvider.gemini:
+        return 'gemini-2.5-flash';
+      case LlmProvider.openai:
+        return 'gpt-4o-mini';
+      case LlmProvider.anthropic:
+        return 'claude-3-5-sonnet-latest';
+    }
+  }
+
+  /// API anahtarinin nereden alinacagina dair ipucu.
+  String get keyHint {
+    switch (this) {
+      case LlmProvider.gemini:
+        return 'AIza... (aistudio.google.com)';
+      case LlmProvider.openai:
+        return 'sk-... (platform.openai.com)';
+      case LlmProvider.anthropic:
+        return 'sk-ant-... (console.anthropic.com)';
+    }
+  }
+
+  static LlmProvider fromId(String? id) => LlmProvider.values.firstWhere(
+        (p) => p.name == id,
+        orElse: () => LlmProvider.gemini,
+      );
+}
+
+/// Tum saglayicilar icin ortak istemci arayuzu.
 ///
-/// Telefon uykuya girince veya ag anlik koparsa istek dusebilir; bu durumda
-/// birkac kez otomatik tekrar dener, boylece kullaniciya hata yansimaz.
-class LlmClient {
+/// Ajan dongusu (AgentLoop) sadece bu arayuzu bilir; hangi saglayici oldugu
+/// onemsizdir. Yeni saglayici = yeni bir alt sinif + factory'ye bir satir.
+abstract class LlmClient {
   final String apiKey;
   final String model;
   final int maxRetries;
 
   LlmClient({
     required this.apiKey,
-    this.model = 'gemini-2.5-flash',
+    required this.model,
     this.maxRetries = 3,
   });
 
-  Uri get _endpoint => Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/'
-        '$model:generateContent?key=$apiKey',
-      );
-
+  /// Gecmisi + sistem talimati + arac tanimlariyla modeli cagirir; modelin
+  /// cevabini (duz metin ve/veya arac cagrilari) ChatMessage olarak dondurur.
   Future<ChatMessage> send({
     required List<ChatMessage> history,
     required String systemPrompt,
     required List<Map<String, dynamic>> toolDeclarations,
-  }) async {
-    final body = jsonEncode({
-      'systemInstruction': {
-        'parts': [
-          {'text': systemPrompt}
-        ]
-      },
-      'contents': _toContents(history),
-      'tools': [
-        {'functionDeclarations': toolDeclarations}
-      ],
-      'generationConfig': {'temperature': 0.4},
-    });
+  });
 
+  /// Saglayici + anahtar + modele gore dogru istemciyi uretir.
+  static LlmClient create({
+    required LlmProvider provider,
+    required String apiKey,
+    required String model,
+  }) {
+    final m = model.trim().isEmpty ? provider.defaultModel : model.trim();
+    switch (provider) {
+      case LlmProvider.gemini:
+        return GeminiClient(apiKey: apiKey, model: m);
+      case LlmProvider.openai:
+        return OpenAiClient(apiKey: apiKey, model: m);
+      case LlmProvider.anthropic:
+        return AnthropicClient(apiKey: apiKey, model: m);
+    }
+  }
+}
+
+/// Saglayicilarin paylastigi HTTP + yeniden deneme yardimcisi.
+///
+/// Telefon uykuya girince veya ag anlik koparsa istek dusebilir; bu durumda
+/// birkac kez otomatik tekrar dener, boylece kullaniciya hata yansimaz.
+class HttpRetry {
+  /// [ok] geldiginde govdeyi ChatMessage'a cevirmek [parse] ile yapilir.
+  /// 5xx/429 ve ag hatalari geri cekilerek tekrar denenir.
+  static Future<ChatMessage> post({
+    required Uri url,
+    required Map<String, String> headers,
+    required String body,
+    required int maxRetries,
+    required ChatMessage Function(Map<String, dynamic> data) parse,
+  }) async {
     Object? lastErr;
     for (var attempt = 0; attempt < maxRetries; attempt++) {
       try {
         final res = await http
-            .post(_endpoint,
-                headers: {'Content-Type': 'application/json'}, body: body)
-            .timeout(const Duration(seconds: 45));
+            .post(url, headers: headers, body: body)
+            .timeout(const Duration(seconds: 60));
 
-        // 5xx / 429 -> gecici, tekrar denemeye deger.
         if (res.statusCode >= 500 || res.statusCode == 429) {
           lastErr = 'API ${res.statusCode}';
           await _backoff(attempt);
@@ -62,10 +127,8 @@ class LlmClient {
             text: 'API HATASI ${res.statusCode}: ${res.body}',
           );
         }
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return _parseResponse(data);
+        return parse(jsonDecode(res.body) as Map<String, dynamic>);
       } on SocketException catch (e) {
-        // Ag kopmasi / uyku -> tekrar dene.
         lastErr = e;
         await _backoff(attempt);
       } on HttpException catch (e) {
@@ -76,7 +139,6 @@ class LlmClient {
         await _backoff(attempt);
       }
     }
-
     return ChatMessage(
       role: Role.assistant,
       text: 'Baglanti kurulamadi ($maxRetries deneme). '
@@ -84,81 +146,8 @@ class LlmClient {
     );
   }
 
-  Future<void> _backoff(int attempt) async {
-    // 0.8s, 1.6s, 3.2s ...
+  static Future<void> _backoff(int attempt) async {
     final ms = (800 * (1 << attempt)).clamp(800, 6000);
     await Future.delayed(Duration(milliseconds: ms));
-  }
-
-  List<Map<String, dynamic>> _toContents(List<ChatMessage> history) {
-    final out = <Map<String, dynamic>>[];
-    for (final m in history) {
-      switch (m.role) {
-        case Role.user:
-          out.add({
-            'role': 'user',
-            'parts': [
-              {'text': m.text}
-            ]
-          });
-          break;
-        case Role.assistant:
-          final parts = <Map<String, dynamic>>[];
-          if (m.text.isNotEmpty) parts.add({'text': m.text});
-          for (final c in m.toolCalls) {
-            parts.add({
-              'functionCall': {'name': c.name, 'args': c.args}
-            });
-          }
-          if (parts.isNotEmpty) out.add({'role': 'model', 'parts': parts});
-          break;
-        case Role.tool:
-          final r = m.toolResult!;
-          out.add({
-            'role': 'user',
-            'parts': [
-              {
-                'functionResponse': {
-                  'name': r.name,
-                  'response': {'result': r.output},
-                }
-              }
-            ]
-          });
-          break;
-        case Role.system:
-          break;
-      }
-    }
-    return out;
-  }
-
-  ChatMessage _parseResponse(Map<String, dynamic> data) {
-    final candidates = data['candidates'] as List?;
-    if (candidates == null || candidates.isEmpty) {
-      return ChatMessage(role: Role.assistant, text: '(bos yanit)');
-    }
-    final parts = (candidates.first['content']?['parts'] as List?) ?? const [];
-    final buffer = StringBuffer();
-    final calls = <ToolCall>[];
-    var callIndex = 0;
-
-    for (final p in parts) {
-      if (p is! Map) continue;
-      if (p['text'] != null) buffer.write(p['text']);
-      if (p['functionCall'] != null) {
-        final fc = p['functionCall'] as Map;
-        calls.add(ToolCall(
-          id: 'call_${callIndex++}',
-          name: (fc['name'] ?? '').toString(),
-          args: Map<String, dynamic>.from(fc['args'] ?? {}),
-        ));
-      }
-    }
-    return ChatMessage(
-      role: Role.assistant,
-      text: buffer.toString().trim(),
-      toolCalls: calls,
-    );
   }
 }

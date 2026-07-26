@@ -1,5 +1,8 @@
 import '../tools/confirm_tool.dart';
+import '../tools/device_extra_tools.dart';
 import '../tools/device_tools.dart';
+import '../tools/memory_tools.dart';
+import '../tools/routine_tools.dart';
 import '../tools/schedule_tools.dart';
 import '../tools/screen_tool.dart';
 import '../tools/shell_tool.dart';
@@ -12,15 +15,38 @@ class ToolRegistry {
 
   ToolRegistry() {
     _register([
+      // Cekirdek
       ShellTool(),
-      OpenAppTool(),
-      SendSmsTool(),
-      LocationTool(),
-      NotifyTool(),
-      ScheduleNotificationTool(),
       CreateUiTool(),
       ScreenControlTool(),
       ConfirmTool(),
+      // Bildirim & rutinler
+      NotifyTool(),
+      ScheduleNotificationTool(),
+      CreateRoutineTool(),
+      ListRoutinesTool(),
+      CancelRoutineTool(),
+      // Uzun sureli hafiza
+      RememberTool(),
+      RecallTool(),
+      ForgetTool(),
+      // Cihaz araclari
+      OpenAppTool(),
+      ListAppsTool(),
+      SendSmsTool(),
+      ReadSmsTool(),
+      MakeCallTool(),
+      ReadContactsTool(),
+      LocationTool(),
+      ClipboardTool(),
+      BatteryTool(),
+      DeviceInfoTool(),
+      TorchTool(),
+      SetVolumeTool(),
+      VibrateTool(),
+      OpenUrlTool(),
+      OpenSettingsTool(),
+      AddCalendarEventTool(),
     ]);
   }
 

@@ -1,75 +1,55 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/agent/agent_loop.dart';
 import '../core/agent/llm_client.dart';
+import '../core/agent/system_prompt.dart';
 import '../core/agent/tool_registry.dart';
 import '../core/native/native_tools.dart';
+import '../core/settings.dart';
+import '../core/store/conversation_store.dart';
 import '../models/chat_message.dart';
+import '../models/conversation.dart';
 
-const _kApiKey = 'gemini_api_key';
-const _kModel = 'gemini_model';
-
-const kSystemPrompt = '''
-Sen kullanicinin Android telefonunda calisan kisisel bir yapay zeka AJANISIN.
-Amacin: kullanicinin isini bastan sona SENIN yapman. Sadece cevap veren bir
-sohbet botu degilsin; elindeki araclarla telefonda gercek islemler yaparsin.
-
-Calisma tarzi:
-- Turkce, kisa ve net konus.
-- Bir isi arac ile yapabiliyorsan tahmin etme, araci CAGIR.
-- Karmasik gorevleri kucuk adimlara bol ve adimlari kendin zincirle. Her arac
-  sonucunu degerlendir, gerekiyorsa bir sonraki araci cagir. Gerekli tum
-  adimlari tamamlamadan durma.
-- Guvenli/geri alinabilir islemler icin kullanicidan tekrar tekrar onay isteme;
-  isi yap ve sonucu ozetle.
-- Sadece geri donusu OLMAYAN veya tehlikeli islemlerden (dosya silme, toplu
-  degisiklik, mesaj gonderme) once tek cumlelik kisa bir uyari ver.
-
-Araclar:
-- run_shell: Termux uzerinde Linux komutu (python, curl, git, dosya islemleri,
-  paket kurma, indirme). Ciktilari yorumla, ham ciktiya bogma.
-- schedule_notification: Gecikmeli hatirlatmalar icin. "5 dakika sonra hatirlat"
-  gibi istekleri BUNUNLA yap. ASLA run_shell + sleep kullanma.
-- create_ui: Kullaniciya ozel bir ekran/mini uygulama olustur (form, buton
-- screen_control: Ekranda gezinip senin yerine islem yap (erisilebilirlik). Once action=read ile ekrani gor, sonra tap/type/scroll/back/home ile ilerle. Baska uygulamalarda otomasyon icin bunu kullan.
-  panosu, gosterge). Kullanici bir arac/panel/form isteyince BUNU kullan.
-  Ekrandaki butonlar tekrar sana komut gonderebilir.
-- open_app, send_sms, get_location, notify: cihaz islemleri.
-
-Otomasyon ve iletisim:
-- Ekranda is yaparken (screen_control) HER adimdan once kisa bir cumleyle
-  ne yapacagini soyle (ornek: "Arama cubuguna dokunuyorum."). Boylece
-  kullanici canli takip eder.
-- Onemli veya geri donusu olmayan islemlerden ONCE mutlaka confirm araciyla
-  onay al: mesaj/SMS gonderme, arama, silme, satin alma, otomasyonla gonderme.
-  "reddedildi" donerse islemi YAPMA.
-
-Uzun surecek komutlarda (buyuk indirme vb.) komutu arka plana al
-(ornek: "komut > log.txt 2>&1 &") ve hemen don; sonucu sonra kontrol et.
-''';
+// Sistem talimati artik core/agent/system_prompt.dart icinde (hafiza ile
+// birlikte calisma aninda uretilir). Geriye donuk import'lar icin re-export.
+export '../core/agent/system_prompt.dart' show kBaseSystemPrompt;
 
 class AgentState {
-  final List<ChatMessage> messages;
+  final List<Conversation> conversations;
+  final String currentId;
   final bool busy;
-  final bool hasKey;
+  final AppSettings? settings;
 
   AgentState({
-    this.messages = const [],
+    this.conversations = const [],
+    this.currentId = '',
     this.busy = false,
-    this.hasKey = false,
+    this.settings,
   });
 
+  Conversation? get current {
+    for (final c in conversations) {
+      if (c.id == currentId) return c;
+    }
+    return conversations.isEmpty ? null : conversations.first;
+  }
+
+  List<ChatMessage> get messages => current?.messages ?? const [];
+  bool get hasKey => settings?.hasKey ?? false;
+  LlmProvider get provider => settings?.provider ?? LlmProvider.gemini;
+
   AgentState copyWith({
-    List<ChatMessage>? messages,
+    List<Conversation>? conversations,
+    String? currentId,
     bool? busy,
-    bool? hasKey,
+    AppSettings? settings,
   }) =>
       AgentState(
-        messages: messages ?? this.messages,
+        conversations: conversations ?? this.conversations,
+        currentId: currentId ?? this.currentId,
         busy: busy ?? this.busy,
-        hasKey: hasKey ?? this.hasKey,
+        settings: settings ?? this.settings,
       );
 }
 
@@ -79,73 +59,135 @@ class AgentNotifier extends StateNotifier<AgentState> {
   }
 
   final ToolRegistry _registry = ToolRegistry();
-  String _apiKey = '';
-  String _model = 'gemini-2.5-flash';
+  final ConversationStore _store = ConversationStore();
 
   Future<void> _load() async {
-    final p = await SharedPreferences.getInstance();
-    _apiKey = p.getString(_kApiKey) ?? '';
-    _model = p.getString(_kModel) ?? 'gemini-2.5-flash';
-    state = state.copyWith(hasKey: _apiKey.isNotEmpty);
-  }
-
-  Future<void> saveKey(String key, {String? model}) async {
-    final p = await SharedPreferences.getInstance();
-    _apiKey = key.trim();
-    await p.setString(_kApiKey, _apiKey);
-    if (model != null && model.isNotEmpty) {
-      _model = model;
-      await p.setString(_kModel, model);
+    final settings = await AppSettings.load();
+    var convos = await _store.loadAll();
+    if (convos.isEmpty) {
+      convos = [_store.createNew()];
     }
-    state = state.copyWith(hasKey: _apiKey.isNotEmpty);
+    state = state.copyWith(
+      settings: settings,
+      conversations: convos,
+      currentId: convos.first.id,
+    );
   }
 
-  String get model => _model;
+  AppSettings get settings =>
+      state.settings ??
+      AppSettings(
+        provider: LlmProvider.gemini,
+        apiKeys: <LlmProvider, String>{},
+        models: <LlmProvider, String>{},
+      );
 
-  void clearChat() => state = state.copyWith(messages: []);
+  Future<void> saveSettings({
+    LlmProvider? provider,
+    String? apiKey,
+    String? model,
+  }) async {
+    final s = settings;
+    if (provider != null) s.provider = provider;
+    if (apiKey != null) s.apiKeys[s.provider] = apiKey.trim();
+    if (model != null && model.isNotEmpty) s.models[s.provider] = model.trim();
+    await s.save();
+    state = state.copyWith(settings: s);
+  }
+
+  // --- Sohbet yonetimi ---
+
+  Future<void> _persist() async {
+    await _store.saveAll(state.conversations);
+  }
+
+  void newConversation() {
+    final c = _store.createNew();
+    final list = [c, ...state.conversations];
+    state = state.copyWith(conversations: list, currentId: c.id);
+    _persist();
+  }
+
+  void switchConversation(String id) {
+    state = state.copyWith(currentId: id);
+  }
+
+  void deleteConversation(String id) {
+    var list = state.conversations.where((c) => c.id != id).toList();
+    if (list.isEmpty) list = [_store.createNew()];
+    final current =
+        list.any((c) => c.id == state.currentId) ? state.currentId : list.first.id;
+    state = state.copyWith(conversations: list, currentId: current);
+    _persist();
+  }
+
+  /// Aktif sohbetin mesajlarini temizler.
+  void clearChat() {
+    final cur = state.current;
+    if (cur == null) return;
+    cur.messages = [];
+    state = state.copyWith(conversations: [...state.conversations]);
+    _persist();
+  }
 
   Future<void> sendUserMessage(String text) async {
     if (text.trim().isEmpty || state.busy) return;
-    if (_apiKey.isEmpty) {
-      _append(ChatMessage(
-        role: Role.assistant,
-        text: 'Once ayarlardan Gemini API anahtarini gir.',
-      ));
+    final cur = state.current;
+    if (cur == null) return;
+
+    if (!settings.hasKey) {
+      cur.messages = [
+        ...cur.messages,
+        ChatMessage(
+          role: Role.assistant,
+          text: 'Once ayarlardan (${settings.provider.label}) API anahtarini gir.',
+        )
+      ];
+      state = state.copyWith(conversations: [...state.conversations]);
       return;
     }
 
-    final history = List<ChatMessage>.from(state.messages)
-      ..add(ChatMessage(role: Role.user, text: text));
-    state = state.copyWith(messages: history, busy: true);
+    cur.messages = [...cur.messages, ChatMessage(role: Role.user, text: text)];
+    cur.autoTitleFrom(text);
+    cur.updatedAt = DateTime.now();
+    state = state.copyWith(conversations: [...state.conversations], busy: true);
 
     // Gorev suresince telefon uykuya girse bile baglanti kopmasin.
     await NativeTools.startAgentTask();
 
     final loop = AgentLoop(
-      llm: LlmClient(apiKey: _apiKey, model: _model),
+      llm: LlmClient.create(
+        provider: settings.provider,
+        apiKey: settings.apiKey,
+        model: settings.model,
+      ),
       registry: _registry,
-      systemPrompt: kSystemPrompt,
+      systemPrompt: await buildSystemPrompt(),
       maxSteps: 15,
     );
 
+    final history = List<ChatMessage>.from(cur.messages);
     try {
       await loop.run(
         history,
         onEvent: (_) {
-          state = state.copyWith(messages: List<ChatMessage>.from(history));
+          cur.messages = List<ChatMessage>.from(history);
+          cur.updatedAt = DateTime.now();
+          state = state.copyWith(conversations: [...state.conversations]);
         },
       );
     } catch (e) {
-      _append(ChatMessage(role: Role.assistant, text: 'Hata: $e'));
+      cur.messages = [
+        ...cur.messages,
+        ChatMessage(role: Role.assistant, text: 'Hata: $e')
+      ];
+      state = state.copyWith(conversations: [...state.conversations]);
       if (kDebugMode) debugPrint('agent error: $e');
     } finally {
       await NativeTools.stopAgentTask();
       state = state.copyWith(busy: false);
+      await _persist();
     }
-  }
-
-  void _append(ChatMessage m) {
-    state = state.copyWith(messages: [...state.messages, m]);
   }
 }
 

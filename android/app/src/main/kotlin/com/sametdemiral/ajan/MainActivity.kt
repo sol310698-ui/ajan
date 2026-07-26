@@ -5,15 +5,27 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.CalendarContract
+import android.provider.ContactsContract
+import android.provider.Settings
 import android.telephony.SmsManager
 import androidx.annotation.NonNull
 import androidx.core.app.NotificationCompat
@@ -73,6 +85,14 @@ class MainActivity : FlutterActivity() {
             checkSelfPermission("android.permission.POST_NOTIFICATIONS")
                 != PackageManager.PERMISSION_GRANTED)
             want.add("android.permission.POST_NOTIFICATIONS")
+        // Genisletilmis cihaz araclari icin tehlikeli izinler.
+        for (p in listOf(
+            "android.permission.READ_CONTACTS",
+            "android.permission.READ_SMS",
+            "android.permission.CALL_PHONE"
+        )) {
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) want.add(p)
+        }
         if (want.isNotEmpty()) requestPermissions(want.toTypedArray(), reqRunCommand)
     }
 
@@ -155,6 +175,36 @@ class MainActivity : FlutterActivity() {
                     }
                     "overlayStop" -> {
                         stopService(Intent(this, OverlayService::class.java))
+                        result.success("ok")
+                    }
+                    "clipboardGet" -> result.success(clipboardGet())
+                    "clipboardSet" -> {
+                        clipboardSet(call.argument<String>("text") ?: "")
+                        result.success("panoya kopyalandi")
+                    }
+                    "batteryStatus" -> result.success(batteryStatus())
+                    "deviceInfo" -> result.success(deviceInfo())
+                    "toggleTorch" ->
+                        result.success(toggleTorch(call.argument<Boolean>("on") ?: true))
+                    "makeCall" -> result.success(makeCall(call.argument<String>("number") ?: ""))
+                    "readContacts" ->
+                        result.success(readContacts(call.argument<String>("query") ?: ""))
+                    "readSms" -> result.success(readSms(call.argument<Int>("limit") ?: 10))
+                    "addCalendarEvent" -> result.success(addCalendarEvent(
+                        call.argument<String>("title") ?: "Etkinlik",
+                        call.argument<String>("description") ?: "",
+                        (call.argument<Number>("start")?.toLong()) ?: System.currentTimeMillis(),
+                        (call.argument<Number>("end")?.toLong())
+                            ?: (System.currentTimeMillis() + 3600000L)
+                    ))
+                    "listApps" -> result.success(listApps())
+                    "setVolume" -> result.success(setVolume(call.argument<Int>("percent") ?: 50))
+                    "vibrate" -> result.success(vibrate(call.argument<Int>("ms") ?: 400))
+                    "openUrl" -> result.success(openUrl(call.argument<String>("url") ?: ""))
+                    "openSettings" ->
+                        result.success(openSettings(call.argument<String>("panel") ?: "settings"))
+                    "scheduleWake" -> {
+                        scheduleWake((call.argument<Number>("delayMillis")?.toLong()) ?: 60000L)
                         result.success("ok")
                     }
                     else -> result.notImplemented()
@@ -334,6 +384,226 @@ class MainActivity : FlutterActivity() {
             .build()
         nm.notify(System.currentTimeMillis().toInt(), n)
         result.success("bildirim gosterildi")
+    }
+
+    // --- Genisletilmis cihaz araclari ---
+
+    private fun clipboardGet(): String {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip ?: return ""
+        if (clip.itemCount == 0) return ""
+        return clip.getItemAt(0).coerceToText(this).toString()
+    }
+
+    private fun clipboardSet(text: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("ajan", text))
+    }
+
+    private fun batteryStatus(): String {
+        val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
+        return "Batarya: %$level, ${if (charging) "sarj oluyor" else "sarj olmuyor"}"
+    }
+
+    private fun deviceInfo(): String {
+        val dm = resources.displayMetrics
+        return buildString {
+            append("Uretici: ${Build.MANUFACTURER}\n")
+            append("Model: ${Build.MODEL}\n")
+            append("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n")
+            append("Ekran: ${dm.widthPixels}x${dm.heightPixels} @${dm.densityDpi}dpi")
+        }
+    }
+
+    private fun toggleTorch(on: Boolean): String {
+        return try {
+            val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val id = cm.cameraIdList.firstOrNull { camId ->
+                cm.getCameraCharacteristics(camId)
+                    .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            } ?: return "El feneri bulunamadi."
+            cm.setTorchMode(id, on)
+            if (on) "el feneri acildi" else "el feneri kapatildi"
+        } catch (e: Exception) {
+            "el feneri hatasi: ${e.message}"
+        }
+    }
+
+    private fun makeCall(number: String): String {
+        if (number.isBlank()) return "HATA: numara bos."
+        val uri = Uri.parse("tel:$number")
+        return try {
+            if (checkSelfPermission("android.permission.CALL_PHONE")
+                == PackageManager.PERMISSION_GRANTED) {
+                startActivity(Intent(Intent.ACTION_CALL, uri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                "araniyor: $number"
+            } else {
+                startActivity(Intent(Intent.ACTION_DIAL, uri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                "arama ekrani acildi: $number (arama iznini ver, otomatik arasin)"
+            }
+        } catch (e: Exception) {
+            "arama hatasi: ${e.message}"
+        }
+    }
+
+    private fun readContacts(query: String): String {
+        if (checkSelfPermission("android.permission.READ_CONTACTS")
+            != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf("android.permission.READ_CONTACTS"), reqRunCommand)
+            return "Rehber izni henuz yok; izin penceresinden ver ve tekrar dene."
+        }
+        val out = StringBuilder()
+        val proj = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
+        val sel = if (query.isBlank()) null
+            else "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
+        val args = if (query.isBlank()) null else arrayOf("%$query%")
+        val cursor = contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI, proj, sel, args,
+            "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC")
+        cursor?.use {
+            var n = 0
+            while (it.moveToNext() && n < 30) {
+                out.append("${it.getString(0)}: ${it.getString(1)}\n")
+                n++
+            }
+        }
+        return out.toString().trim()
+    }
+
+    private fun readSms(limit: Int): String {
+        if (checkSelfPermission("android.permission.READ_SMS")
+            != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf("android.permission.READ_SMS"), reqRunCommand)
+            return "SMS okuma izni henuz yok; izin penceresinden ver ve tekrar dene."
+        }
+        val out = StringBuilder()
+        val cursor = contentResolver.query(
+            Uri.parse("content://sms/inbox"),
+            arrayOf("address", "body", "date"), null, null, "date DESC")
+        cursor?.use {
+            var n = 0
+            while (it.moveToNext() && n < limit) {
+                out.append("${it.getString(0)}: ${it.getString(1)}\n")
+                n++
+            }
+        }
+        return out.toString().trim()
+    }
+
+    private fun addCalendarEvent(
+        title: String, desc: String, start: Long, end: Long): String {
+        return try {
+            val i = Intent(Intent.ACTION_INSERT)
+                .setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.Events.TITLE, title)
+                .putExtra(CalendarContract.Events.DESCRIPTION, desc)
+                .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+            "takvim etkinligi hazirlandi: $title (kaydetmek icin onayla)"
+        } catch (e: Exception) {
+            "takvim hatasi: ${e.message}"
+        }
+    }
+
+    private fun listApps(): String {
+        val pm = packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = pm.queryIntentActivities(intent, 0)
+            .map { it.loadLabel(pm).toString() }
+            .distinct()
+            .sorted()
+        return apps.joinToString(", ")
+    }
+
+    private fun setVolume(percent: Int): String {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val v = (max * percent.coerceIn(0, 100) / 100.0).toInt()
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+        return "medya sesi %$percent yapildi"
+    }
+
+    private fun vibrate(ms: Int): String {
+        val vib = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager)
+                .defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vib.vibrate(VibrationEffect.createOneShot(
+                ms.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vib.vibrate(ms.toLong())
+        }
+        return "titredildi ($ms ms)"
+    }
+
+    private fun openUrl(url: String): String {
+        return try {
+            val u = if (url.startsWith("http")) url else "https://$url"
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "acildi: $u"
+        } catch (e: Exception) {
+            "acilamadi: ${e.message}"
+        }
+    }
+
+    private fun openSettings(panel: String): String {
+        val action = when (panel.lowercase()) {
+            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+            "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+            "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+            "sound" -> Settings.ACTION_SOUND_SETTINGS
+            "display" -> Settings.ACTION_DISPLAY_SETTINGS
+            "apps" -> Settings.ACTION_APPLICATION_SETTINGS
+            "data" -> Settings.ACTION_DATA_ROAMING_SETTINGS
+            "nfc" -> Settings.ACTION_NFC_SETTINGS
+            "airplane" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
+            else -> Settings.ACTION_SETTINGS
+        }
+        return try {
+            startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "ayar ekrani acildi: $panel"
+        } catch (e: Exception) {
+            "ayar acilamadi: ${e.message}"
+        }
+    }
+
+    private fun scheduleWake(delayMillis: Long) {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val i = Intent(this, WakeReceiver::class.java)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else
+            PendingIntent.FLAG_UPDATE_CURRENT
+        val pi = PendingIntent.getBroadcast(this, 7777, i, flags)
+        val at = System.currentTimeMillis() + delayMillis
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                am.set(AlarmManager.RTC_WAKEUP, at, pi)
+            } else {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            }
+        } catch (e: SecurityException) {
+            am.set(AlarmManager.RTC_WAKEUP, at, pi)
+        }
     }
 
     override fun onDestroy() {

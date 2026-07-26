@@ -53,4 +53,64 @@ class NativeTools {
       await _ch.invokeMethod('stopAgentTask');
     } catch (_) {}
   }
+
+  // --- Cihaz araclari (genisletilmis) ---
+
+  static Future<String> clipboardGet() async =>
+      await _ch.invokeMethod<String>('clipboardGet') ?? '';
+
+  static Future<String> clipboardSet(String text) async =>
+      await _ch.invokeMethod<String>('clipboardSet', {'text': text}) ?? 'ok';
+
+  static Future<String> batteryStatus() async =>
+      await _ch.invokeMethod<String>('batteryStatus') ?? 'bilinmiyor';
+
+  static Future<String> deviceInfo() async =>
+      await _ch.invokeMethod<String>('deviceInfo') ?? 'bilinmiyor';
+
+  static Future<String> toggleTorch(bool on) async =>
+      await _ch.invokeMethod<String>('toggleTorch', {'on': on}) ?? 'ok';
+
+  static Future<String> makeCall(String number) async =>
+      await _ch.invokeMethod<String>('makeCall', {'number': number}) ?? 'ok';
+
+  static Future<String> readContacts(String query) async =>
+      await _ch.invokeMethod<String>('readContacts', {'query': query}) ?? '';
+
+  static Future<String> readSms(int limit) async =>
+      await _ch.invokeMethod<String>('readSms', {'limit': limit}) ?? '';
+
+  static Future<String> addCalendarEvent(
+    String title,
+    String description,
+    int startMillis,
+    int endMillis,
+  ) async =>
+      await _ch.invokeMethod<String>('addCalendarEvent', {
+        'title': title,
+        'description': description,
+        'start': startMillis,
+        'end': endMillis,
+      }) ??
+      'ok';
+
+  static Future<String> listApps() async =>
+      await _ch.invokeMethod<String>('listApps') ?? '';
+
+  static Future<String> setVolume(int percent) async =>
+      await _ch.invokeMethod<String>('setVolume', {'percent': percent}) ?? 'ok';
+
+  static Future<String> vibrate(int ms) async =>
+      await _ch.invokeMethod<String>('vibrate', {'ms': ms}) ?? 'ok';
+
+  static Future<String> openUrl(String url) async =>
+      await _ch.invokeMethod<String>('openUrl', {'url': url}) ?? 'ok';
+
+  static Future<String> openSettings(String panel) async =>
+      await _ch.invokeMethod<String>('openSettings', {'panel': panel}) ?? 'ok';
+
+  /// Rutin/otonom gorev icin: verilen ms sonra uygulamayi uyandir (exact alarm).
+  static Future<String> scheduleWake(int delayMillis) async =>
+      await _ch.invokeMethod<String>('scheduleWake', {'delayMillis': delayMillis}) ??
+      'ok';
 }
