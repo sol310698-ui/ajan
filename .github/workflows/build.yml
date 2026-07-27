@@ -2,8 +2,13 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'claude/**' ]
+    tags: [ 'v*' ]
   workflow_dispatch:
+
+# Release olusturabilmek icin yazma izni.
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -71,15 +76,25 @@ jobs:
       - name: APK uret (arm64)
         run: flutter build apk --release --target-platform android-arm64
 
-      - name: APK'yi yukle
+      - name: APK'yi yeniden adlandir
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/ajan-arm64.apk
+
+      - name: APK'yi yukle (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: ajan-arm64-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: dist/ajan-arm64.apk
 
-      # Etiketli push'ta otomatik Release olustur (opsiyonel)
-      - name: Release'e ekle
-        if: startsWith(github.ref, 'refs/tags/')
+      # Her push'ta guncellenen bir Release: sadece APK.
+      - name: Release yayinla (sadece APK)
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
+          tag_name: build-${{ github.run_number }}
+          name: Ajan APK (build ${{ github.run_number }})
+          body: |
+            Otomatik derlenen arm64 APK.
+            Kurulum: telefona indir, "bilinmeyen kaynaklar"a izin ver, kur.
+          files: dist/ajan-arm64.apk
+          make_latest: true
