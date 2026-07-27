@@ -8,7 +8,7 @@ import 'tool_registry.dart';
 /// Tek bir istegi (prompt) ajan dongusunden gecirir ve nihai metni dondurur.
 ///
 /// Sohbet arayuzunden bagimsizdir; rutinler / arka plan gorevleri bunu kullanir.
-Future<String> runAgentOnce(String prompt, {int maxSteps = 12}) async {
+Future<String> runAgentOnce(String prompt, {int maxSteps = 20}) async {
   final settings = await AppSettings.load();
   if (!settings.hasKey) {
     return 'API anahtari ayarli degil; rutin calistirilamadi.';

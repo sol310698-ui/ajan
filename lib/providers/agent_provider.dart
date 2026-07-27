@@ -163,7 +163,7 @@ class AgentNotifier extends StateNotifier<AgentState> {
       ),
       registry: _registry,
       systemPrompt: await buildSystemPrompt(),
-      maxSteps: 15,
+      maxSteps: 30,
     );
 
     final history = List<ChatMessage>.from(cur.messages);

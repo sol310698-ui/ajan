@@ -22,7 +22,7 @@ class AgentLoop {
     required this.llm,
     required this.registry,
     required this.systemPrompt,
-    this.maxSteps = 8,
+    this.maxSteps = 30,
   });
 
   /// Her adimda UI'yi guncellemek icin cagrilir (yeni mesajlar akar).
@@ -53,10 +53,12 @@ class AgentLoop {
       }
     }
 
-    // Guvenlik siniri asildi.
+    // Guvenlik siniri asildi. Kullanici "devam et" derse ajan gecmisten
+    // kaldigi yerden surdurebilir.
     final stop = ChatMessage(
       role: Role.assistant,
-      text: 'Adim siniri asildi ($maxSteps). Islem durduruldu.',
+      text: 'Islem $maxSteps adimda tamamlanamadi (guvenlik siniri). '
+          'Kaldigim yeri ozetleyeyim mi, yoksa "devam et" de, sureyim?',
     );
     history.add(stop);
     onEvent(stop);
