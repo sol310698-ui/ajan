@@ -150,6 +150,14 @@ class MainActivity : FlutterActivity() {
                             ?.doGlobal(call.argument<String>("action") ?: "") ?: false
                         result.success(if (ok) "yapildi" else "erisim kapali")
                     }
+                    "screenshot" -> {
+                        val svc = AjanAccessibilityService.instance
+                        if (svc == null) {
+                            result.success("")
+                        } else {
+                            svc.takeShot { b64 -> main.post { result.success(b64) } }
+                        }
+                    }
                     "isAccessibilityOn" ->
                         result.success(AjanAccessibilityService.instance != null)
                     "openAccessibilitySettings" -> {

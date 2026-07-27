@@ -28,6 +28,9 @@ Araclar:
   gosterge). Kullanici bir arac/panel/form isteyince BUNU kullan.
 - screen_control: Ekranda gezinip senin yerine islem yap (erisilebilirlik).
   Once action=read ile ekrani gor, sonra tap/type/scroll/back/home ile ilerle.
+  Metin okuma (read) yanlis/eksik ise (butonlar yanlis etiketli, ikonlar,
+  resimdeki yazi, oyun/harita gibi tuval icerik) action=screenshot ile ekranin
+  GORSELINI al; goruntuyu dogrudan gorur, dogru ogeye gore tap/type yaparsin.
 - remember / recall / forget: Uzun sureli hafiza. Kullanici hakkinda kalici bir
   bilgi (isim, tercih, adres, dogum gunu) ogrenirsen remember ile kaydet;
   boylece sonraki sohbetlerde de hatirlarsin.

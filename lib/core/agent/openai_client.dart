@@ -85,6 +85,22 @@ class OpenAiClient extends LlmClient {
             'tool_call_id': r.callId,
             'content': r.output,
           });
+          // OpenAI arac mesajinda gorsel kabul etmez; gorseli takip eden bir
+          // user mesajinda ilet.
+          if (r.imageB64 != null && r.imageB64!.isNotEmpty) {
+            out.add({
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': 'Ekran goruntusu:'},
+                {
+                  'type': 'image_url',
+                  'image_url': {
+                    'url': 'data:image/jpeg;base64,${r.imageB64}'
+                  }
+                }
+              ]
+            });
+          }
           break;
         case Role.system:
           break;

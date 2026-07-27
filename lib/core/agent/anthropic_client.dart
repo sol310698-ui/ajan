@@ -87,11 +87,29 @@ class AnthropicClient extends LlmClient {
           break;
         case Role.tool:
           final r = m.toolResult!;
+          // Gorsel varsa tool_result icerigi blok dizisi (metin + image) olur;
+          // Claude bunu dogrudan gorur.
+          final Object content;
+          if (r.imageB64 != null && r.imageB64!.isNotEmpty) {
+            content = [
+              {'type': 'text', 'text': r.output},
+              {
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'image/jpeg',
+                  'data': r.imageB64,
+                }
+              }
+            ];
+          } else {
+            content = r.output;
+          }
           push('user', [
             {
               'type': 'tool_result',
               'tool_use_id': r.callId,
-              'content': r.output,
+              'content': content,
             }
           ]);
           break;

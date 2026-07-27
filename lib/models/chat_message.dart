@@ -24,13 +24,19 @@ class ToolResult {
   final bool ok;
   final String output;
 
+  /// Aracin urettigi gorsel (JPEG base64). Sadece oturum icinde modele
+  /// gorsel olarak iletilir; kaliciya yazilmaz (prefs'i sismesin diye).
+  final String? imageB64;
+
   ToolResult({
     required this.callId,
     required this.name,
     required this.ok,
     required this.output,
+    this.imageB64,
   });
 
+  // Not: imageB64 kasitli olarak JSON'a yazilmaz.
   Map<String, dynamic> toJson() =>
       {'callId': callId, 'name': name, 'ok': ok, 'output': output};
 

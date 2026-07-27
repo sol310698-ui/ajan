@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../../models/chat_message.dart';
 
@@ -136,6 +138,18 @@ class _ToolResultCard extends StatelessWidget {
               fontSize: 12,
             ),
           ),
+          if (result.imageB64 != null && result.imageB64!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                base64Decode(result.imageB64!),
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
         ],
       ),
     );

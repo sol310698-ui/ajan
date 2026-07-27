@@ -75,6 +75,16 @@ class AgentLoop {
     }
     try {
       final output = await tool.run(call.args);
+      // Arac gorsel urettiyse ("IMG::<base64>") ayikla; modele gorsel iletilir.
+      if (output.startsWith('IMG::')) {
+        return ToolResult(
+          callId: call.id,
+          name: call.name,
+          ok: true,
+          output: 'Ekran goruntusu alindi; gorsel asagida iletildi.',
+          imageB64: output.substring(5),
+        );
+      }
       return ToolResult(
         callId: call.id,
         name: call.name,

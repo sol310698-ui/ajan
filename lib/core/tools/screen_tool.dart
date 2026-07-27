@@ -12,11 +12,15 @@ class ScreenControlTool extends Tool {
       'Telefon ekraninda senin yerine islem yapar (erisilebilirlik). '
       'action degerleri: '
       '"read" (ekrandaki metinleri oku - once bunu kullanip ekrani gor), '
+      '"screenshot" (ekranin GORSELINI al ve gor - metin okuma yanlis/eksikse, '
+      'ikonlari, resimdeki yaziyi veya butonlarin gercekte ne oldugunu anlamak '
+      'icin bunu kullan; goruntuyu dogrudan gorursun), '
       '"tap" (text ile eslesen ogeye dokun), '
       '"type" (yazilabilir alana text yaz), '
       '"scroll" (direction: up/down), '
       '"back"/"home"/"recents"/"notifications" (genel islemler). '
-      'Bir uygulamada is yaparken once "read" ile ekrani gor, sonra "tap"/"type" ile ilerle.';
+      'Bir uygulamada is yaparken once "read" ile ekrani gor; etiketler yanlis '
+      'veya yetersizse "screenshot" ile gorsele bak, sonra "tap"/"type" ile ilerle.';
 
   @override
   Map<String, dynamic> get parameters => {
@@ -53,6 +57,14 @@ class ScreenControlTool extends Tool {
     switch (action) {
       case 'read':
         return 'EKRAN:\n${await Automation.readScreen()}';
+      case 'screenshot':
+        final b64 = await Automation.screenshot();
+        if (b64.isEmpty) {
+          return 'Ekran goruntusu alinamadi (Android 11+ gerekir ve '
+              'erisilebilirlik acik olmali).';
+        }
+        // AgentLoop bu isareti gorunce goruntuyu modele gorsel olarak iletir.
+        return 'IMG::$b64';
       case 'tap':
         return await Automation.tap(text);
       case 'type':

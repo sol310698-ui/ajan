@@ -68,17 +68,21 @@ class GeminiClient extends LlmClient {
           break;
         case Role.tool:
           final r = m.toolResult!;
-          out.add({
-            'role': 'user',
-            'parts': [
-              {
-                'functionResponse': {
-                  'name': r.name,
-                  'response': {'result': r.output},
-                }
+          final parts = <Map<String, dynamic>>[
+            {
+              'functionResponse': {
+                'name': r.name,
+                'response': {'result': r.output},
               }
-            ]
-          });
+            }
+          ];
+          // Arac gorsel urettiyse ayni user icerigine gorseli de ekle.
+          if (r.imageB64 != null && r.imageB64!.isNotEmpty) {
+            parts.add({
+              'inlineData': {'mimeType': 'image/jpeg', 'data': r.imageB64}
+            });
+          }
+          out.add({'role': 'user', 'parts': parts});
           break;
         case Role.system:
           break;

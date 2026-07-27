@@ -7,6 +7,10 @@ class Automation {
   static Future<String> readScreen() async =>
       await _ch.invokeMethod<String>('screenRead') ?? '(bos)';
 
+  /// Ekran goruntusunu JPEG->base64 olarak alir (bos ise alinamadi).
+  static Future<String> screenshot() async =>
+      await _ch.invokeMethod<String>('screenshot') ?? '';
+
   static Future<String> tap(String text) async =>
       await _ch.invokeMethod<String>('screenTap', {'text': text}) ?? 'ok';
 

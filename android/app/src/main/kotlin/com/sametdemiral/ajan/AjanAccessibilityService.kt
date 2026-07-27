@@ -1,9 +1,14 @@
 package com.sametdemiral.ajan
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
+import android.util.Base64
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.io.ByteArrayOutputStream
 
 /**
  * Ekranda gezinme + otomasyon: ekrani okur, metne dokunur, yazi yazar,
@@ -132,6 +137,57 @@ class AjanAccessibilityService : AccessibilityService() {
             if (r != null) return r
         }
         return null
+    }
+
+    /**
+     * Ekranin goruntusunu alir (API 30+), kucultup JPEG->base64 dondurur.
+     * Erisilebilirlik agacinin yanlis/eksik okudugu durumlarda (ikonlar,
+     * resimdeki yazi, yanlis etiketli butonlar) ajanin "gozu" olur.
+     * Asenkron; sonucu [cb] ile doner (basarisizsa bos string).
+     */
+    fun takeShot(cb: (String) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            cb(""); return
+        }
+        try {
+            takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor,
+                object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                        try {
+                            val buffer = result.hardwareBuffer
+                            val raw = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
+                            val bmp = raw?.copy(Bitmap.Config.ARGB_8888, false)
+                            raw?.recycle()
+                            buffer.close()
+                            if (bmp == null) { cb(""); return }
+                            val scaled = scaleDown(bmp, 900)
+                            val baos = ByteArrayOutputStream()
+                            scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+                            if (scaled != bmp) scaled.recycle()
+                            bmp.recycle()
+                            cb(Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP))
+                        } catch (e: Exception) {
+                            cb("")
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        cb("")
+                    }
+                })
+        } catch (e: Exception) {
+            cb("")
+        }
+    }
+
+    private fun scaleDown(bmp: Bitmap, maxSide: Int): Bitmap {
+        val w = bmp.width
+        val h = bmp.height
+        val longest = maxOf(w, h)
+        if (longest <= maxSide) return bmp
+        val ratio = maxSide.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            bmp, (w * ratio).toInt(), (h * ratio).toInt(), true)
     }
 
     fun doGlobal(action: String): Boolean {
