@@ -165,10 +165,12 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
             if (provider == LlmProvider.gemini)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Google arama (sunucu tarafi)',
+                title: const Text('Google arama modu (sunucu tarafi)',
                     style: TextStyle(color: Colors.white, fontSize: 14)),
                 subtitle: const Text(
-                    'Cevaplari Google\'in gercek zamanli aramasiyla destekler.',
+                    'Acikken Gemini yanitlari Google aramasiyla desteklenir; '
+                    'ancak bu modda cihaz araclari (ekran, arama, SMS...) '
+                    'devre disidir. Kapaliyken tam ajan + web_search calisir.',
                     style: TextStyle(color: Color(0xFF9E9CB8), fontSize: 12)),
                 value: state.settings?.googleSearch ?? false,
                 activeColor: const Color(0xFF6C5CE7),

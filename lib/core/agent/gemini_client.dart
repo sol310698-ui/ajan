@@ -29,14 +29,17 @@ class GeminiClient extends LlmClient {
     required String systemPrompt,
     required List<Map<String, dynamic>> toolDeclarations,
   }) {
-    final tools = <Map<String, dynamic>>[
-      {'functionDeclarations': toolDeclarations}
-    ];
-    // Google'in sunucu tarafi aramasi (grounding). Gemini 2.x bunu function
-    // calling ile birlikte destekler.
-    if (googleSearch) {
-      tools.add({'google_search': <String, dynamic>{}});
-    }
+    // Gemini, built-in google_search ile function calling'i AYNI istekte
+    // kabul etmez (400). Bu yuzden ya biri ya oteki:
+    //  - googleSearch acik -> sadece Google aramali (grounded) yanit modu.
+    //  - kapali -> tam ajan (fonksiyon araclari + web_search).
+    final List<Map<String, dynamic>> tools = googleSearch
+        ? [
+            {'google_search': <String, dynamic>{}}
+          ]
+        : [
+            {'functionDeclarations': toolDeclarations}
+          ];
 
     final body = jsonEncode({
       'systemInstruction': {
