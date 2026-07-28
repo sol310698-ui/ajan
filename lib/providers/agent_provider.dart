@@ -86,11 +86,13 @@ class AgentNotifier extends StateNotifier<AgentState> {
     LlmProvider? provider,
     String? apiKey,
     String? model,
+    bool? googleSearch,
   }) async {
     final s = settings;
     if (provider != null) s.provider = provider;
     if (apiKey != null) s.apiKeys[s.provider] = apiKey.trim();
     if (model != null && model.isNotEmpty) s.models[s.provider] = model.trim();
+    if (googleSearch != null) s.googleSearch = googleSearch;
     await s.save();
     state = state.copyWith(settings: s);
   }
@@ -160,6 +162,7 @@ class AgentNotifier extends StateNotifier<AgentState> {
         provider: settings.provider,
         apiKey: settings.apiKey,
         model: settings.model,
+        googleSearch: settings.googleSearch,
       ),
       registry: _registry,
       systemPrompt: await buildSystemPrompt(),

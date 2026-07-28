@@ -6,6 +6,7 @@ import 'agent/llm_client.dart';
 /// anahtari ve model. Saglayici degistiginde anahtarlar kaybolmaz.
 class AppSettings {
   static const _kProvider = 'llm_provider';
+  static const _kGoogleSearch = 'gemini_google_search';
   static const _legacyGeminiKey = 'gemini_api_key';
   static const _legacyGeminiModel = 'gemini_model';
 
@@ -16,10 +17,14 @@ class AppSettings {
   final Map<LlmProvider, String> apiKeys;
   final Map<LlmProvider, String> models;
 
+  /// Gemini icin: Google'in sunucu tarafi arama (grounding) araci acik mi.
+  bool googleSearch;
+
   AppSettings({
     required this.provider,
     required this.apiKeys,
     required this.models,
+    this.googleSearch = false,
   });
 
   String get apiKey => apiKeys[provider] ?? '';
@@ -53,12 +58,14 @@ class AppSettings {
       provider: LlmProviderX.fromId(p.getString(_kProvider)),
       apiKeys: keys,
       models: models,
+      googleSearch: p.getBool(_kGoogleSearch) ?? false,
     );
   }
 
   Future<void> save() async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_kProvider, provider.id);
+    await p.setBool(_kGoogleSearch, googleSearch);
     for (final prov in LlmProvider.values) {
       await p.setString(_keyPref(prov), apiKeys[prov] ?? '');
       await p.setString(_modelPref(prov), models[prov] ?? '');

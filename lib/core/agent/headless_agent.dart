@@ -18,6 +18,7 @@ Future<String> runAgentOnce(String prompt, {int maxSteps = 20}) async {
     provider: settings.provider,
     apiKey: settings.apiKey,
     model: settings.model,
+    googleSearch: settings.googleSearch,
   );
   final loop = AgentLoop(
     llm: llm,

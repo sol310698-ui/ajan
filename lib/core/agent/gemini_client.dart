@@ -5,10 +5,15 @@ import 'llm_client.dart';
 
 /// Google Gemini API istemcisi (function calling).
 class GeminiClient extends LlmClient {
+  /// Google'in sunucu tarafi arama araci (grounding). Acikken model cevabini
+  /// gercek zamanli Google aramasiyla destekler.
+  final bool googleSearch;
+
   GeminiClient({
     required String apiKey,
     String model = 'gemini-2.5-flash',
     int maxRetries = 3,
+    this.googleSearch = false,
   }) : super(apiKey: apiKey, model: model, maxRetries: maxRetries);
 
   Uri get _endpoint => Uri.parse(
@@ -22,6 +27,15 @@ class GeminiClient extends LlmClient {
     required String systemPrompt,
     required List<Map<String, dynamic>> toolDeclarations,
   }) {
+    final tools = <Map<String, dynamic>>[
+      {'functionDeclarations': toolDeclarations}
+    ];
+    // Google'in sunucu tarafi aramasi (grounding). Gemini 2.x bunu function
+    // calling ile birlikte destekler.
+    if (googleSearch) {
+      tools.add({'google_search': <String, dynamic>{}});
+    }
+
     final body = jsonEncode({
       'systemInstruction': {
         'parts': [
@@ -29,9 +43,7 @@ class GeminiClient extends LlmClient {
         ]
       },
       'contents': _toContents(history),
-      'tools': [
-        {'functionDeclarations': toolDeclarations}
-      ],
+      'tools': tools,
       'generationConfig': {'temperature': 0.4},
     });
 

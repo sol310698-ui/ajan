@@ -300,6 +300,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     hintText: provider.defaultModel,
                   ),
                 ),
+                if (provider == LlmProvider.gemini)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Google arama (sunucu tarafi)',
+                        style: TextStyle(color: Colors.white, fontSize: 14)),
+                    subtitle: const Text(
+                        'Cevaplari Google\'in gercek zamanli aramasiyla destekler.',
+                        style: TextStyle(color: Color(0xFF9E9CB8), fontSize: 12)),
+                    value: state.settings?.googleSearch ?? false,
+                    activeColor: const Color(0xFF6C5CE7),
+                    onChanged: (v) => notifier.saveSettings(googleSearch: v),
+                  ),
                 const SizedBox(height: 20),
                 const Text('Ses', style: TextStyle(color: Color(0xFF9E9CB8))),
                 SwitchListTile(

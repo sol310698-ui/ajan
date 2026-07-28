@@ -82,11 +82,12 @@ abstract class LlmClient {
     required LlmProvider provider,
     required String apiKey,
     required String model,
+    bool googleSearch = false,
   }) {
     final m = model.trim().isEmpty ? provider.defaultModel : model.trim();
     switch (provider) {
       case LlmProvider.gemini:
-        return GeminiClient(apiKey: apiKey, model: m);
+        return GeminiClient(apiKey: apiKey, model: m, googleSearch: googleSearch);
       case LlmProvider.openai:
         return OpenAiClient(apiKey: apiKey, model: m);
       case LlmProvider.anthropic:
