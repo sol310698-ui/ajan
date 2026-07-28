@@ -385,10 +385,23 @@ class MainActivity : FlutterActivity() {
             nm.createNotificationChannel(
                 NotificationChannel(chId, "Ajan", NotificationManager.IMPORTANCE_DEFAULT))
         }
+        // Bildirime basinca uygulamayi ac.
+        val launch = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else
+            PendingIntent.FLAG_UPDATE_CURRENT
+        val contentPi = PendingIntent.getActivity(
+            this, System.currentTimeMillis().toInt(), launch, piFlags)
+
         val n = NotificationCompat.Builder(this, chId)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentPi)
+            .setAutoCancel(true)
             .build()
         nm.notify(System.currentTimeMillis().toInt(), n)
         result.success("bildirim gosterildi")

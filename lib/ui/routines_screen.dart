@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/routine.dart';
 import '../providers/routine_provider.dart';
+import 'routine_detail_screen.dart';
 
 /// Otonom gorevleri (rutinleri) goruntule / ekle / kaldir.
 class RoutinesScreen extends ConsumerWidget {
@@ -169,6 +170,11 @@ class _RoutineTile extends StatelessWidget {
       color: const Color(0xFF1E1E2E),
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       child: ListTile(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => RoutineDetailScreen(routineId: r.id)),
+        ),
         title: Text(r.name,
             style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.w600)),
