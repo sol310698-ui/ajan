@@ -6,7 +6,8 @@ import '../models/chat_message.dart';
 import '../providers/agent_provider.dart';
 import 'memory_screen.dart';
 import 'routines_screen.dart';
-import 'settings_dialog.dart';
+import 'settings_screen.dart';
+import 'theme.dart';
 import 'widgets/message_widgets.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -90,17 +91,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0F),
+      backgroundColor: AppColors.bg,
       drawer: _buildDrawer(state),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF11111B),
+        flexibleSpace: const DecoratedBox(
+          decoration: BoxDecoration(gradient: AppColors.brand),
+        ),
         title: Text(state.current?.title ?? 'Ajan',
             maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (!state.hasKey)
             const Padding(
               padding: EdgeInsets.only(right: 8),
-              child: Icon(Icons.key_off, color: Colors.orangeAccent),
+              child: Icon(Icons.key_off, color: Colors.amberAccent),
             ),
           if (voice.speaking)
             IconButton(
@@ -134,8 +137,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           if (state.busy)
             const LinearProgressIndicator(
-              color: Color(0xFF6C5CE7),
-              backgroundColor: Color(0xFF11111B),
+              color: AppColors.primary,
+              backgroundColor: AppColors.surface,
             ),
           _InputBar(
             controller: _input,
@@ -244,9 +247,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _openSettings() {
-    showDialog(
-      context: context,
-      builder: (_) => const SettingsDialog(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
   }
 }
@@ -255,19 +258,37 @@ class _EmptyHint extends StatelessWidget {
   const _EmptyHint();
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined, size: 64, color: Color(0xFF6C5CE7)),
-            SizedBox(height: 16),
-            Text(
-              'Bir sey sor, sesle konus veya bir is ver.\n'
-              'Mikrofona basip konusabilirsin.',
+            Container(
+              width: 96,
+              height: 96,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppColors.brand,
+              ),
+              child: const Icon(Icons.smart_toy_outlined,
+                  size: 48, color: Colors.white),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Merhaba, ben senin ajaninim',
+              style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Bir sey sor, sesle konus ya da bir is ver.\n'
+              'Ornek: "hava durumu Istanbul", "pil durumu", '
+              '"her sabah 8de gundem ozeti".',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF6E6C8A), fontSize: 15),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 14),
             ),
           ],
         ),
@@ -293,47 +314,62 @@ class _InputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
-      color: const Color(0xFF11111B),
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(listening ? Icons.mic : Icons.mic_none,
-                color: listening ? Colors.redAccent : const Color(0xFF6C5CE7)),
-            onPressed: onMic,
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              enabled: enabled,
-              minLines: 1,
-              maxLines: 5,
-              style: const TextStyle(color: Colors.white),
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              decoration: InputDecoration(
-                hintText: listening ? 'Dinliyorum...' : 'Mesaj...',
-                hintStyle: const TextStyle(color: Color(0xFF6E6C8A)),
-                filled: true,
-                fillColor: const Color(0xFF1E1E2E),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: Color(0xFF20202E))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(listening ? Icons.mic : Icons.mic_none,
+                  color:
+                      listening ? Colors.redAccent : AppColors.primaryLight),
+              onPressed: onMic,
+            ),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                enabled: enabled,
+                minLines: 1,
+                maxLines: 5,
+                style: const TextStyle(color: AppColors.textPrimary),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => onSend(),
+                decoration: InputDecoration(
+                  hintText: listening ? 'Dinliyorum...' : 'Mesaj...',
+                  hintStyle: const TextStyle(color: AppColors.textFaint),
+                  filled: true,
+                  fillColor: AppColors.card,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(26),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 12),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
-          CircleAvatar(
-            backgroundColor: const Color(0xFF6C5CE7),
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white),
-              onPressed: enabled ? onSend : null,
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: enabled ? onSend : null,
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: enabled ? AppColors.brand : null,
+                  color: enabled ? null : AppColors.card,
+                ),
+                child: Icon(Icons.send,
+                    color: enabled ? Colors.white : AppColors.textFaint,
+                    size: 20),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
