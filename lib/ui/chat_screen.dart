@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/voice/voice_service.dart';
 import '../models/chat_message.dart';
 import '../providers/agent_provider.dart';
+import 'alarms_screen.dart';
 import 'memory_screen.dart';
 import 'routines_screen.dart';
 import 'settings_screen.dart';
@@ -180,6 +181,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onTap: () {
                 notifier.newConversation();
                 Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.alarm, color: Color(0xFF6C5CE7)),
+              title: const Text('Alarmlar',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AlarmsScreen()));
               },
             ),
             ListTile(

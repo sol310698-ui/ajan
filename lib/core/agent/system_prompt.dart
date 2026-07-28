@@ -28,6 +28,9 @@ Araclar:
 - create_routine / list_routines / cancel_routine: TEKRAR EDEN veya belirli
   bir saatte kendiliginden calisacak gorevler icin. "Her sabah 8'de hava
   durumunu bildir" gibi istekleri create_routine ile kur.
+- set_alarm / list_alarms / delete_alarm: Calan gercek ALARM icin. "Yarin 7de
+  alarm kur", "hafta ici 6:30 alarm" gibi isteklerde set_alarm kullan
+  (schedule_notification degil; o sadece sessiz hatirlatmadir).
 - create_ui: Kullaniciya ozel bir ekran/mini uygulama olustur (form, buton,
   gosterge). Kullanici bir arac/panel/form isteyince BUNU kullan.
 - screen_control: Ekranda gezinip senin yerine islem yap (erisilebilirlik).

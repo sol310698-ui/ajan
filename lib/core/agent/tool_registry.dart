@@ -1,3 +1,4 @@
+import '../tools/alarm_tools.dart';
 import '../tools/confirm_tool.dart';
 import '../tools/device_extra_tools.dart';
 import '../tools/device_tools.dart';
@@ -30,6 +31,9 @@ class ToolRegistry {
       CreateRoutineTool(),
       ListRoutinesTool(),
       CancelRoutineTool(),
+      SetAlarmTool(),
+      ListAlarmsTool(),
+      DeleteAlarmTool(),
       // Uzun sureli hafiza
       RememberTool(),
       RecallTool(),

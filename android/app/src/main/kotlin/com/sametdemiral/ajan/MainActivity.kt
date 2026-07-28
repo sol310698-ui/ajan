@@ -215,6 +215,33 @@ class MainActivity : FlutterActivity() {
                         scheduleWake((call.argument<Number>("delayMillis")?.toLong()) ?: 60000L)
                         result.success("ok")
                     }
+                    "alarmsGet" -> result.success(AlarmStore.toJsonString(this))
+                    "alarmsAdd" -> result.success(AlarmStore.add(
+                        this,
+                        call.argument<Int>("hour") ?: 8,
+                        call.argument<Int>("minute") ?: 0,
+                        call.argument<String>("label") ?: "",
+                        (call.argument<List<Int>>("days") ?: emptyList()),
+                        call.argument<Boolean>("vibrate") ?: true,
+                        call.argument<Boolean>("sound") ?: true
+                    ))
+                    "alarmsUpdate" -> result.success(AlarmStore.update(
+                        this,
+                        call.argument<Int>("id") ?: -1,
+                        call.argument<Int>("hour") ?: 8,
+                        call.argument<Int>("minute") ?: 0,
+                        call.argument<String>("label") ?: "",
+                        (call.argument<List<Int>>("days") ?: emptyList()),
+                        call.argument<Boolean>("vibrate") ?: true,
+                        call.argument<Boolean>("sound") ?: true
+                    ))
+                    "alarmsDelete" ->
+                        result.success(AlarmStore.delete(this, call.argument<Int>("id") ?: -1))
+                    "alarmsSetEnabled" -> result.success(AlarmStore.setEnabled(
+                        this,
+                        call.argument<Int>("id") ?: -1,
+                        call.argument<Boolean>("enabled") ?: true
+                    ))
                     else -> result.notImplemented()
                 }
             }

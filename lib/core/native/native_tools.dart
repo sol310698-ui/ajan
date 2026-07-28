@@ -113,4 +113,55 @@ class NativeTools {
   static Future<String> scheduleWake(int delayMillis) async =>
       await _ch.invokeMethod<String>('scheduleWake', {'delayMillis': delayMillis}) ??
       'ok';
+
+  // --- Alarm/Saat (native kaynak dogrulugu: tum liste JSON doner) ---
+
+  static Future<String> alarmsGet() async =>
+      await _ch.invokeMethod<String>('alarmsGet') ?? '[]';
+
+  static Future<String> alarmsAdd({
+    required int hour,
+    required int minute,
+    required String label,
+    required List<int> days,
+    required bool vibrate,
+    required bool sound,
+  }) async =>
+      await _ch.invokeMethod<String>('alarmsAdd', {
+        'hour': hour,
+        'minute': minute,
+        'label': label,
+        'days': days,
+        'vibrate': vibrate,
+        'sound': sound,
+      }) ??
+      '[]';
+
+  static Future<String> alarmsUpdate({
+    required int id,
+    required int hour,
+    required int minute,
+    required String label,
+    required List<int> days,
+    required bool vibrate,
+    required bool sound,
+  }) async =>
+      await _ch.invokeMethod<String>('alarmsUpdate', {
+        'id': id,
+        'hour': hour,
+        'minute': minute,
+        'label': label,
+        'days': days,
+        'vibrate': vibrate,
+        'sound': sound,
+      }) ??
+      '[]';
+
+  static Future<String> alarmsDelete(int id) async =>
+      await _ch.invokeMethod<String>('alarmsDelete', {'id': id}) ?? '[]';
+
+  static Future<String> alarmsSetEnabled(int id, bool enabled) async =>
+      await _ch.invokeMethod<String>(
+          'alarmsSetEnabled', {'id': id, 'enabled': enabled}) ??
+      '[]';
 }
