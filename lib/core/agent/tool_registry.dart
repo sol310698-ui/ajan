@@ -8,6 +8,7 @@ import '../tools/screen_tool.dart';
 import '../tools/shell_tool.dart';
 import '../tools/tool.dart';
 import '../tools/ui_tool.dart';
+import '../tools/web_tools.dart';
 
 /// Tum araclarin kayit merkezi. Yeni yetenek eklemek = buraya bir satir.
 class ToolRegistry {
@@ -20,6 +21,9 @@ class ToolRegistry {
       CreateUiTool(),
       ScreenControlTool(),
       ConfirmTool(),
+      // Internet
+      WebSearchTool(),
+      FetchUrlTool(),
       // Bildirim & rutinler
       NotifyTool(),
       ScheduleNotificationTool(),
