@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/agent/llm_client.dart';
-import '../core/native/automation.dart';
 import '../core/voice/voice_service.dart';
 import '../models/chat_message.dart';
 import '../providers/agent_provider.dart';
 import 'memory_screen.dart';
 import 'routines_screen.dart';
+import 'settings_dialog.dart';
 import 'widgets/message_widgets.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -245,154 +244,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _openSettings() {
-    final notifier = ref.read(agentProvider.notifier);
     showDialog(
       context: context,
-      builder: (_) => Consumer(builder: (ctx, r, __) {
-        final state = r.watch(agentProvider);
-        final voice = r.watch(voiceProvider);
-        final vc = r.read(voiceProvider.notifier);
-        final provider = state.provider;
-        final keyCtrl = TextEditingController(text: notifier.settings.apiKey);
-        final modelCtrl =
-            TextEditingController(text: notifier.settings.model);
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E2E),
-          title: const Text('Ayarlar', style: TextStyle(color: Colors.white)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Model saglayici',
-                    style: TextStyle(color: Color(0xFF9E9CB8))),
-                DropdownButton<LlmProvider>(
-                  value: provider,
-                  isExpanded: true,
-                  dropdownColor: const Color(0xFF1E1E2E),
-                  style: const TextStyle(color: Colors.white),
-                  items: LlmProvider.values
-                      .map((p) => DropdownMenuItem(
-                          value: p, child: Text(p.label)))
-                      .toList(),
-                  onChanged: (p) {
-                    if (p != null) {
-                      notifier.saveSettings(provider: p);
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: keyCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: '${provider.label} API Anahtari',
-                    hintText: provider.keyHint,
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: modelCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Model',
-                    hintText: provider.defaultModel,
-                  ),
-                ),
-                if (provider == LlmProvider.gemini)
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Google arama (sunucu tarafi)',
-                        style: TextStyle(color: Colors.white, fontSize: 14)),
-                    subtitle: const Text(
-                        'Cevaplari Google\'in gercek zamanli aramasiyla destekler.',
-                        style: TextStyle(color: Color(0xFF9E9CB8), fontSize: 12)),
-                    value: state.settings?.googleSearch ?? false,
-                    activeColor: const Color(0xFF6C5CE7),
-                    onChanged: (v) => notifier.saveSettings(googleSearch: v),
-                  ),
-                const SizedBox(height: 20),
-                const Text('Ses', style: TextStyle(color: Color(0xFF9E9CB8))),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Cevaplari sesli oku',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
-                  value: voice.autoSpeak,
-                  activeColor: const Color(0xFF6C5CE7),
-                  onChanged: (v) => vc.setAutoSpeak(v),
-                ),
-                Text('Konusma hizi: ${voice.rate.toStringAsFixed(2)}',
-                    style:
-                        const TextStyle(color: Colors.white, fontSize: 13)),
-                Slider(
-                  min: 0.2,
-                  max: 1.0,
-                  divisions: 16,
-                  value: voice.rate.clamp(0.2, 1.0),
-                  activeColor: const Color(0xFF6C5CE7),
-                  label: voice.rate.toStringAsFixed(2),
-                  onChanged: (v) => vc.setRate(v),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('Dene'),
-                    onPressed: () => vc.speak(
-                        'Merhaba, ben senin ajaninim. Bu bir hiz denemesi.'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text('Ekran kontrolu',
-                    style: TextStyle(color: Color(0xFF9E9CB8))),
-                const SizedBox(height: 4),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.accessibility_new, size: 18),
-                  label: const Text('Erisilebilirligi ac'),
-                  onPressed: () => Automation.openAccessibilitySettings(),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.bubble_chart, size: 18),
-                        label: const Text('Yuzen buton'),
-                        onPressed: () async {
-                          if (!await Automation.hasOverlayPermission()) {
-                            await Automation.requestOverlayPermission();
-                          } else {
-                            await Automation.overlayStart();
-                          }
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                      tooltip: 'Yuzen butonu kapat',
-                      onPressed: () => Automation.overlayStop(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Kapat'),
-            ),
-            FilledButton(
-              onPressed: () {
-                notifier.saveSettings(
-                    apiKey: keyCtrl.text, model: modelCtrl.text);
-                Navigator.pop(ctx);
-              },
-              child: const Text('Kaydet'),
-            ),
-          ],
-        );
-      }),
+      builder: (_) => const SettingsDialog(),
     );
   }
 }

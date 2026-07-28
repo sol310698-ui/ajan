@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../../models/chat_message.dart';
 import 'llm_client.dart';
 
@@ -54,6 +56,33 @@ class GeminiClient extends LlmClient {
       maxRetries: maxRetries,
       parse: _parseResponse,
     );
+  }
+
+  @override
+  Future<List<String>> listModels() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models'
+            '?key=$apiKey&pageSize=1000'),
+      ).timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final models = (data['models'] as List?) ?? const [];
+      final out = <String>[];
+      for (final m in models) {
+        if (m is! Map) continue;
+        final methods =
+            (m['supportedGenerationMethods'] as List?)?.cast<String>() ??
+                const [];
+        if (!methods.contains('generateContent')) continue;
+        final name = (m['name'] ?? '').toString();
+        out.add(name.startsWith('models/') ? name.substring(7) : name);
+      }
+      out.sort();
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   List<Map<String, dynamic>> _toContents(List<ChatMessage> history) {

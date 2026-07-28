@@ -77,6 +77,10 @@ abstract class LlmClient {
     required List<Map<String, dynamic>> toolDeclarations,
   });
 
+  /// Saglayicidan kullanilabilir model kimliklerini ceker (anahtar gecerliyse).
+  /// Hata/yetkisizlik durumunda bos liste doner. Alt siniflar override eder.
+  Future<List<String>> listModels() async => const [];
+
   /// Saglayici + anahtar + modele gore dogru istemciyi uretir.
   static LlmClient create({
     required LlmProvider provider,

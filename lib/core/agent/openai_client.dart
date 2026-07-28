@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../../models/chat_message.dart';
 import 'llm_client.dart';
 
@@ -52,6 +54,33 @@ class OpenAiClient extends LlmClient {
       maxRetries: maxRetries,
       parse: _parseResponse,
     );
+  }
+
+  @override
+  Future<List<String>> listModels() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://api.openai.com/v1/models'),
+        headers: {'Authorization': 'Bearer $apiKey'},
+      ).timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = (data['data'] as List?) ?? const [];
+      final out = <String>[];
+      for (final m in list) {
+        if (m is! Map) continue;
+        final id = (m['id'] ?? '').toString();
+        // Sohbet/tool destekleyen gpt ve o-serisi modelleri goster.
+        if (id.startsWith('gpt') || id.startsWith('o1') || id.startsWith('o3') ||
+            id.startsWith('o4') || id.startsWith('chatgpt')) {
+          out.add(id);
+        }
+      }
+      out.sort();
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   List<Map<String, dynamic>> _toMessages(List<ChatMessage> history) {

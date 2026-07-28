@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../../models/chat_message.dart';
 import 'llm_client.dart';
 
@@ -47,6 +49,30 @@ class AnthropicClient extends LlmClient {
       maxRetries: maxRetries,
       parse: _parseResponse,
     );
+  }
+
+  @override
+  Future<List<String>> listModels() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://api.anthropic.com/v1/models?limit=100'),
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      ).timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = (data['data'] as List?) ?? const [];
+      final out = <String>[];
+      for (final m in list) {
+        if (m is Map && m['id'] != null) out.add(m['id'].toString());
+      }
+      out.sort();
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Claude rollerin (user/assistant) donusumlu olmasini ister. Bizim
