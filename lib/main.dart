@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_nav.dart';
+import 'core/log/app_log.dart';
 import 'providers/agent_provider.dart';
 import 'providers/routine_provider.dart';
 import 'ui/chat_screen.dart';
@@ -12,12 +15,28 @@ import 'ui/theme.dart';
 final ProviderContainer appContainer = ProviderContainer();
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  _setupOverlayChannel();
-  runApp(UncontrolledProviderScope(
-    container: appContainer,
-    child: const AjanApp(),
-  ));
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await AppLog.init();
+
+    // Dart tarafi hatalari log'a dussun.
+    FlutterError.onError = (details) {
+      AppLog.e('FlutterError: ${details.exceptionAsString()}');
+      FlutterError.presentError(details);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      AppLog.e('PlatformError: $error');
+      return true;
+    };
+
+    _setupOverlayChannel();
+    runApp(UncontrolledProviderScope(
+      container: appContainer,
+      child: const AjanApp(),
+    ));
+  }, (error, stack) {
+    AppLog.e('Uncaught: $error\n$stack');
+  });
 }
 
 /// Yuzen baloncuktan (native OverlayService) gelen mesajlari ANA ajana iletir.

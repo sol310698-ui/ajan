@@ -7,6 +7,7 @@ import '../core/agent/llm_client.dart';
 import '../core/native/automation.dart';
 import '../core/voice/voice_service.dart';
 import '../providers/agent_provider.dart';
+import 'logs_screen.dart';
 import 'theme.dart';
 
 /// Ayarlar SAYFASI: saglayici + anahtar + model (anahtar girilince modeller
@@ -395,6 +396,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
               ],
+            ),
+          ),
+          _sectionTitle('Tani (kayitlar)'),
+          _card(
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.receipt_long, size: 18),
+                label: const Text('Kayitlari (log) gor'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LogsScreen()),
+                ),
+              ),
             ),
           ),
         ],

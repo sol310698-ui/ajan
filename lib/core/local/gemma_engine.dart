@@ -2,6 +2,7 @@ import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../log/app_log.dart';
 import '../settings.dart';
 
 /// flutter_gemma (MediaPipe) ile offline model motoru. flutter_gemma API'sine
@@ -60,30 +61,40 @@ class GemmaEngine {
   /// Sohbet turlarini modele verip yaniti dondurur.
   Future<String> ask(String system, List<GemmaTurn> turns) async {
     try {
+      AppLog.i('gemma.ask: init basliyor');
       await _ensureInit();
       // GPU (OpenCL) bazi cihazlarda modeli acamiyor; once GPU dene, olmazsa
       // CPU'ya dus (daha yavas ama her cihazda calisir).
       if (_model == null) {
         try {
+          AppLog.i('gemma.ask: GPU model aciliyor');
           _model = await FlutterGemma.getActiveModel(
-            maxTokens: 1024,
+            maxTokens: 512,
             preferredBackend: PreferredBackend.gpu,
           );
-        } catch (_) {
+          AppLog.i('gemma.ask: GPU model acildi');
+        } catch (e) {
+          AppLog.e('gemma.ask: GPU basarisiz ($e); CPU deneniyor');
           _model = await FlutterGemma.getActiveModel(
-            maxTokens: 1024,
+            maxTokens: 512,
             preferredBackend: PreferredBackend.cpu,
           );
+          AppLog.i('gemma.ask: CPU model acildi');
         }
       }
+      AppLog.i('gemma.ask: chat olusturuluyor (${turns.length} tur)');
       final chat = await _model.createChat(systemInstruction: system);
       for (final t in turns) {
         await chat.addQueryChunk(Message.text(text: t.text, isUser: t.isUser));
       }
+      AppLog.i('gemma.ask: generate basliyor');
       final res = await chat.generateChatResponse();
-      return res.toString().trim();
+      final out = res.toString().trim();
+      AppLog.i('gemma.ask: yanit alindi (len=${out.length})');
+      return out;
     } catch (e) {
       _model = null; // sonraki denemede yeniden kurulsun (CPU'ya dusebilsin)
+      AppLog.e('gemma.ask HATA: $e');
       return 'Yerel model hatasi: $e';
     }
   }

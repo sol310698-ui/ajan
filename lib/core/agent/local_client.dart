@@ -42,7 +42,10 @@ class LocalClient extends LlmClient {
       }
     }
 
-    final text = await gemmaEngine.ask(systemPrompt, turns);
+    // Kucuk yerel model icin KISA sistem talimati (dev agent talimati agir).
+    const shortSystem =
+        'Sen Turkce konusan, kisa ve net cevap veren yardimci bir asistansin.';
+    final text = await gemmaEngine.ask(shortSystem, turns);
     return ChatMessage(
       role: Role.assistant,
       text: text.isEmpty ? '(yerel model bos yanit verdi)' : text,
