@@ -10,6 +10,7 @@ import '../settings.dart';
 class GemmaEngine {
   static const _kInstalled = 'gemma_installed';
   bool _initialized = false;
+  String? _initedToken;
   dynamic _model;
 
   /// Onerilen offline model (LiteRT .task, HuggingFace).
@@ -17,13 +18,21 @@ class GemmaEngine {
       'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q8_ekv1280.task';
 
   Future<void> _ensureInit() async {
-    if (_initialized) return;
     final s = await AppSettings.load();
-    await FlutterGemma.initialize(
-      inferenceEngines: [MediaPipeEngine()],
-      huggingFaceToken: s.hfToken.isEmpty ? null : s.hfToken,
-    );
+    final token = s.hfToken.trim().isEmpty ? null : s.hfToken.trim();
+    // Token degistiyse motoru YENIDEN baslat (onceki token'siz init'e takilma).
+    if (_initialized && _initedToken == token) return;
+    AppLog.i('gemma init: token ${token == null ? "YOK" : "var(${token.length})"}');
+    try {
+      await FlutterGemma.initialize(
+        inferenceEngines: [MediaPipeEngine()],
+        huggingFaceToken: token,
+      );
+    } catch (e) {
+      AppLog.e('gemma initialize hatasi: $e');
+    }
     _initialized = true;
+    _initedToken = token;
   }
 
   Future<bool> isInstalled() async {

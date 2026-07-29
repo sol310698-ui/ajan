@@ -268,6 +268,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   controller: _hfCtrl,
                   style: const TextStyle(color: AppColors.textPrimary),
                   obscureText: true,
+                  onEditingComplete: () {
+                    final s = ref.read(agentProvider.notifier).settings;
+                    s.hfToken = _hfCtrl.text.trim();
+                    ref.read(agentProvider.notifier).saveSettings();
+                    FocusScope.of(context).unfocus();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('HF token kaydedildi.')),
+                    );
+                  },
                   decoration: const InputDecoration(
                     labelText: 'HuggingFace token (yerel model indirmek icin)',
                     hintText: 'hf_... (ucretsiz; huggingface.co/settings/tokens)',
