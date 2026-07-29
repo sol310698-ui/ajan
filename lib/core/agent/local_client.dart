@@ -1,12 +1,11 @@
 import '../../models/chat_message.dart';
+import '../local/gemma_engine.dart';
 import 'llm_client.dart';
 
-/// Cihaz uzerinde (offline) model calistiran istemci.
+/// Cihaz uzerinde (offline) model calistiran istemci (flutter_gemma/MediaPipe).
 ///
-/// NOT: Native calistirma motoru (llama.cpp/fllama) tum llama.cpp'yi derledigi
-/// icin APK'yi cok buyutuyordu ve "az kaynak" hedefine ters dustu; bu surumde
-/// bundlanmadi. Model INDIRME/YONETIM (Yerel modeller ekrani) calisir; motor
-/// daha hafif bir cozumle (MediaPipe/Gemini Nano) ileride baglanacak.
+/// Kucuk yerel modeller function calling'de zayif oldugu icin araclar
+/// gonderilmez; offline modda ajan sohbet-odakli calisir.
 class LocalClient extends LlmClient {
   LocalClient({required String modelPath})
       : super(apiKey: '', model: modelPath, maxRetries: 1);
@@ -17,13 +16,36 @@ class LocalClient extends LlmClient {
     required String systemPrompt,
     required List<Map<String, dynamic>> toolDeclarations,
   }) async {
+    if (!await gemmaEngine.isInstalled()) {
+      return ChatMessage(
+        role: Role.assistant,
+        text: 'Offline model kurulu degil. "Yerel modeller" ekranindan '
+            'offline modeli indir/kur.',
+      );
+    }
+
+    final turns = <GemmaTurn>[];
+    for (final m in history) {
+      switch (m.role) {
+        case Role.user:
+          turns.add(GemmaTurn(m.text, true));
+          break;
+        case Role.assistant:
+          if (m.text.isNotEmpty) turns.add(GemmaTurn(m.text, false));
+          break;
+        case Role.tool:
+          final r = m.toolResult!;
+          turns.add(GemmaTurn('Arac sonucu (${r.name}): ${r.output}', true));
+          break;
+        case Role.system:
+          break;
+      }
+    }
+
+    final text = await gemmaEngine.ask(systemPrompt, turns);
     return ChatMessage(
       role: Role.assistant,
-      text: model.trim().isEmpty
-          ? 'Yerel model secili degil. "Yerel modeller"den bir model indir.'
-          : 'Yerel calistirma motoru bu surumde henuz aktif degil '
-              '(model indirildi ama motor baglanmadi). Simdilik internet '
-              'gerektiren bir saglayici (Gemini/OpenAI/Claude) kullan.',
+      text: text.isEmpty ? '(yerel model bos yanit verdi)' : text,
     );
   }
 }

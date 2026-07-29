@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/local/gemma_engine.dart';
 import '../core/local/model_catalog.dart';
 import '../providers/local_model_provider.dart';
 import 'theme.dart';
@@ -25,14 +26,25 @@ class LocalModelsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          const _GemmaSection(),
           const Padding(
-            padding: EdgeInsets.fromLTRB(4, 4, 4, 12),
+            padding: EdgeInsets.fromLTRB(4, 16, 4, 8),
             child: Text(
-              'Offline modeller (int4). WiFi ile indir, "Aktif yap".\n'
-              'Not: Calistirma motoru bu surumde bundlanmadi (llama.cpp APK\'yi '
-              'cok buyutuyordu). Indirme/yonetim calisir; motor daha hafif bir '
-              'cozumle yakinda baglanacak.',
-              style: TextStyle(color: AppColors.textFaint, fontSize: 12.5),
+              'DIGER MODELLER (GGUF)',
+              style: TextStyle(
+                  color: AppColors.primaryLight,
+                  fontSize: 12,
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text(
+              'Bu GGUF modeller su an sadece indirilir/yonetilir (motoru henuz '
+              'baglanmadi). Offline calistirma icin yukaridaki flutter_gemma '
+              'modelini kullan.',
+              style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
           ),
           ...kModelCatalog.map((m) => _ModelCard(
@@ -40,6 +52,109 @@ class LocalModelsScreen extends ConsumerWidget {
                 state: state,
                 ctrl: ctrl,
               )),
+        ],
+      ),
+    );
+  }
+}
+
+/// flutter_gemma (MediaPipe) offline motoru: indir & kur.
+class _GemmaSection extends StatefulWidget {
+  const _GemmaSection();
+  @override
+  State<_GemmaSection> createState() => _GemmaSectionState();
+}
+
+class _GemmaSectionState extends State<_GemmaSection> {
+  bool _installed = false;
+  bool _busy = false;
+  double _progress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    gemmaEngine.isInstalled().then((v) {
+      if (mounted) setState(() => _installed = v);
+    });
+  }
+
+  Future<void> _install() async {
+    setState(() {
+      _busy = true;
+      _progress = 0;
+    });
+    final ok = await gemmaEngine.install(onProgress: (p) {
+      if (mounted) setState(() => _progress = p);
+    });
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _installed = ok;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Offline model kuruldu. Artik internetsiz de sohbet edebilirsin.'
+          : 'Kurulum basarisiz. HuggingFace token (Ayarlar) gerekebilir.'),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: _installed
+            ? Border.all(color: AppColors.success, width: 1.2)
+            : Border.all(color: AppColors.primary, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Offline motor — Gemma 3 1B (GPU)',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text(
+              'Internetsiz calisan asil model. Bir kez indir (WiFi), sonra '
+              'internet kesilince ajan otomatik buna duser. Indirmek icin '
+              'Ayarlar\'da HuggingFace token gerekebilir (ucretsiz).',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
+          const SizedBox(height: 10),
+          if (_busy) ...[
+            LinearProgressIndicator(
+              value: _progress == 0 ? null : _progress,
+              color: AppColors.primary,
+              backgroundColor: AppColors.surface,
+            ),
+            const SizedBox(height: 6),
+            Text('%${(_progress * 100).toStringAsFixed(0)} indiriliyor...',
+                style: const TextStyle(
+                    color: AppColors.textFaint, fontSize: 12)),
+          ] else if (_installed)
+            Row(
+              children: const [
+                Icon(Icons.check_circle, color: AppColors.success, size: 18),
+                SizedBox(width: 6),
+                Text('Kurulu — offline hazir',
+                    style: TextStyle(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600)),
+              ],
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Offline modeli indir & kur'),
+                onPressed: _install,
+              ),
+            ),
         ],
       ),
     );

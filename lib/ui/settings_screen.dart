@@ -20,6 +20,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _keyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
+  final _hfCtrl = TextEditingController();
   List<String> _models = [];
   bool _loading = false;
   Map<String, bool> _perms = {};
@@ -30,6 +31,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final s = ref.read(agentProvider.notifier).settings;
     _keyCtrl.text = s.apiKey;
     _modelCtrl.text = s.model;
+    _hfCtrl.text = s.hfToken;
     _loadPerms();
   }
 
@@ -54,6 +56,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _keyCtrl.dispose();
     _modelCtrl.dispose();
+    _hfCtrl.dispose();
     super.dispose();
   }
 
@@ -89,6 +92,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _save() {
+    final s = ref.read(agentProvider.notifier).settings;
+    s.hfToken = _hfCtrl.text.trim();
     ref
         .read(agentProvider.notifier)
         .saveSettings(apiKey: _keyCtrl.text, model: _modelCtrl.text);
@@ -255,6 +260,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   decoration: InputDecoration(
                     labelText: 'Model (elle de yazabilirsin)',
                     hintText: provider.defaultModel,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _hfCtrl,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'HuggingFace token (yerel model indirmek icin)',
+                    hintText: 'hf_... (ucretsiz; huggingface.co/settings/tokens)',
                   ),
                 ),
                 if (provider == LlmProvider.gemini)

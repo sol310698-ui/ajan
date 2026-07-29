@@ -7,6 +7,7 @@ import 'agent/llm_client.dart';
 class AppSettings {
   static const _kProvider = 'llm_provider';
   static const _kGoogleSearch = 'gemini_google_search';
+  static const _kHfToken = 'hf_token';
   static const _legacyGeminiKey = 'gemini_api_key';
   static const _legacyGeminiModel = 'gemini_model';
 
@@ -20,11 +21,15 @@ class AppSettings {
   /// Gemini icin: Google'in sunucu tarafi arama (grounding) araci acik mi.
   bool googleSearch;
 
+  /// Yerel model indirmek icin HuggingFace token'i (gated modeller icin).
+  String hfToken;
+
   AppSettings({
     required this.provider,
     required this.apiKeys,
     required this.models,
     this.googleSearch = false,
+    this.hfToken = '',
   });
 
   String get apiKey => apiKeys[provider] ?? '';
@@ -59,6 +64,7 @@ class AppSettings {
       apiKeys: keys,
       models: models,
       googleSearch: p.getBool(_kGoogleSearch) ?? false,
+      hfToken: p.getString(_kHfToken) ?? '',
     );
   }
 
@@ -66,6 +72,7 @@ class AppSettings {
     final p = await SharedPreferences.getInstance();
     await p.setString(_kProvider, provider.id);
     await p.setBool(_kGoogleSearch, googleSearch);
+    await p.setString(_kHfToken, hfToken);
     for (final prov in LlmProvider.values) {
       await p.setString(_keyPref(prov), apiKeys[prov] ?? '');
       await p.setString(_modelPref(prov), models[prov] ?? '');
