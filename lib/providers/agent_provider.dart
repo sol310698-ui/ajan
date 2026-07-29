@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,11 +7,23 @@ import '../core/agent/agent_loop.dart';
 import '../core/agent/llm_client.dart';
 import '../core/agent/system_prompt.dart';
 import '../core/agent/tool_registry.dart';
+import '../core/local/local_model_store.dart';
 import '../core/native/native_tools.dart';
 import '../core/settings.dart';
 import '../core/store/conversation_store.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+
+/// Basit cevrimici kontrolu (bulut LLM'e ulasilabiliyor mu).
+Future<bool> hasInternet() async {
+  try {
+    final r = await InternetAddress.lookup('generativelanguage.googleapis.com')
+        .timeout(const Duration(seconds: 3));
+    return r.isNotEmpty && r.first.rawAddress.isNotEmpty;
+  } catch (_) {
+    return false;
+  }
+}
 
 // Sistem talimati artik core/agent/system_prompt.dart icinde (hafiza ile
 // birlikte calisma aninda uretilir). Geriye donuk import'lar icin re-export.
@@ -147,8 +161,31 @@ class AgentNotifier extends StateNotifier<AgentState> {
     final cur = state.current;
     if (cur == null) return '';
 
-    if (!settings.hasKey) {
-      const msg = 'Once ayarlardan API anahtarini gir.';
+    // Etkin saglayici/model coz: cevrimdisiysa ve yerel model varsa yerele dus.
+    var provider = settings.provider;
+    var apiKey = settings.apiKey;
+    var model = settings.model;
+    final googleSearch = settings.googleSearch;
+    var chatOnly = false;
+
+    if (provider == LlmProvider.local) {
+      model = await LocalModelStore().activeModelPath();
+      chatOnly = true;
+    } else if (!settings.hasKey || !await hasInternet()) {
+      final localPath = await LocalModelStore().activeModelPath();
+      if (localPath.isNotEmpty) {
+        provider = LlmProvider.local;
+        model = localPath;
+        chatOnly = true;
+      }
+    }
+
+    final ready =
+        provider == LlmProvider.local ? model.isNotEmpty : settings.hasKey;
+    if (!ready) {
+      final msg = provider == LlmProvider.local
+          ? 'Yerel model yok. "Yerel modeller"den bir model indir.'
+          : 'Once ayarlardan API anahtarini gir (veya bir yerel model indir).';
       cur.messages = [
         ...cur.messages,
         ChatMessage(role: Role.assistant, text: msg),
@@ -167,12 +204,12 @@ class AgentNotifier extends StateNotifier<AgentState> {
 
     final loop = AgentLoop(
       llm: LlmClient.create(
-        provider: settings.provider,
-        apiKey: settings.apiKey,
-        model: settings.model,
-        googleSearch: settings.googleSearch,
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        googleSearch: googleSearch,
       ),
-      registry: _registry,
+      registry: chatOnly ? ToolRegistry(chatOnly: true) : _registry,
       systemPrompt: await buildSystemPrompt(),
       maxSteps: 30,
     );

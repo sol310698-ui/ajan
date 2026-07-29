@@ -44,6 +44,14 @@ class LocalModelStore {
     await p.setString(_kActive, fileName);
   }
 
+  /// Aktif modelin tam dosya yolu; yoksa bos string.
+  Future<String> activeModelPath() async {
+    final f = await activeFile();
+    if (f.isEmpty) return '';
+    final path = await pathFor(f);
+    return await File(path).exists() ? path : '';
+  }
+
   /// Modeli indirir. [onProgress] 0..1 arasi ilerleme. Iptal icin [cancel]
   /// tamamlandiginda true doner.
   Future<bool> download(

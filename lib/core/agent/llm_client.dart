@@ -6,10 +6,11 @@ import 'package:http/http.dart' as http;
 import '../../models/chat_message.dart';
 import 'anthropic_client.dart';
 import 'gemini_client.dart';
+import 'local_client.dart';
 import 'openai_client.dart';
 
 /// Desteklenen LLM saglayicilari.
-enum LlmProvider { gemini, openai, anthropic }
+enum LlmProvider { gemini, openai, anthropic, local }
 
 extension LlmProviderX on LlmProvider {
   String get id => name;
@@ -22,6 +23,8 @@ extension LlmProviderX on LlmProvider {
         return 'OpenAI (GPT)';
       case LlmProvider.anthropic:
         return 'Anthropic (Claude)';
+      case LlmProvider.local:
+        return 'Yerel (offline)';
     }
   }
 
@@ -34,6 +37,8 @@ extension LlmProviderX on LlmProvider {
         return 'gpt-4o-mini';
       case LlmProvider.anthropic:
         return 'claude-3-5-sonnet-latest';
+      case LlmProvider.local:
+        return '';
     }
   }
 
@@ -46,6 +51,8 @@ extension LlmProviderX on LlmProvider {
         return 'sk-... (platform.openai.com)';
       case LlmProvider.anthropic:
         return 'sk-ant-... (console.anthropic.com)';
+      case LlmProvider.local:
+        return 'Anahtar gerekmez - "Yerel modeller"den indir';
     }
   }
 
@@ -97,6 +104,9 @@ abstract class LlmClient {
         return OpenAiClient(apiKey: apiKey, model: m);
       case LlmProvider.anthropic:
         return AnthropicClient(apiKey: apiKey, model: m);
+      case LlmProvider.local:
+        // 'model' burada aktif GGUF dosyasinin tam yolu olarak gecirilir.
+        return LocalClient(modelPath: model);
     }
   }
 }
