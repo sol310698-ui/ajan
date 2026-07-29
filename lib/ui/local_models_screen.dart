@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/local/gemma_engine.dart';
+import '../core/native/native_tools.dart';
 import 'theme.dart';
 
 /// Cihaz-ici (offline) modeller: HuggingFace token ile indirilebilen, gercekten
@@ -15,8 +16,17 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   List<LiteRtModel> _models = [];
   bool _loading = false;
   String _error = '';
+  String _errorPageUrl = ''; // 403 olan modelin HF sayfasi
   String _active = '';
   final Map<String, double> _progress = {}; // url -> 0..1
+
+  bool _isAuthError(String e) =>
+      e.contains('403') ||
+      e.contains('401') ||
+      e.toLowerCase().contains('auth') ||
+      e.toLowerCase().contains('forbidden') ||
+      e.toLowerCase().contains('gated') ||
+      e.toLowerCase().contains('license');
 
   @override
   void initState() {
@@ -61,14 +71,20 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       _progress.remove(m.url);
       if (err == null) {
         _active = m.name;
+        _error = '';
+        _errorPageUrl = '';
       } else {
         _error = err;
+        _errorPageUrl =
+            _isAuthError(err) ? 'https://huggingface.co/${m.id}' : '';
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(err == null
           ? '${m.name} kuruldu ve aktif. Offline hazir.'
-          : 'Kurulum basarisiz. Ayrinti asagida.'),
+          : (_errorPageUrl.isNotEmpty
+              ? 'Lisans/izin gerekiyor — sayfayi acip onayla.'
+              : 'Kurulum basarisiz. Ayrinti asagida.')),
     ));
   }
 
@@ -131,9 +147,31 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                 color: const Color(0x33E74C3C),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: SelectableText('Hata: $_error',
-                  style: const TextStyle(
-                      color: Color(0xFFFFB4A9), fontSize: 11.5)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText('Hata: $_error',
+                      style: const TextStyle(
+                          color: Color(0xFFFFB4A9), fontSize: 11.5)),
+                  if (_errorPageUrl.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Bu model lisans onayi/token istiyor. Sayfayi acip '
+                        '"Agree/Accept" ile lisansi onayla, sonra tekrar indir.',
+                        style: TextStyle(
+                            color: Color(0xFFFFB4A9), fontSize: 11.5)),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.open_in_browser, size: 18),
+                        label: const Text('Lisansi onayla (web\'de ac)'),
+                        onPressed: () => NativeTools.openUrl(_errorPageUrl),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ],
@@ -171,6 +209,13 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                         ? '${(m.sizeMb / 1024).toStringAsFixed(1)} GB'
                         : '${m.sizeMb} MB',
                     style: const TextStyle(color: AppColors.textSecondary)),
+              IconButton(
+                icon: const Icon(Icons.open_in_new,
+                    size: 16, color: AppColors.textFaint),
+                tooltip: 'HF sayfasi (lisans onayi)',
+                onPressed: () =>
+                    NativeTools.openUrl('https://huggingface.co/${m.id}'),
+              ),
             ],
           ),
           const SizedBox(height: 4),
