@@ -13,6 +13,10 @@ import '../core/settings.dart';
 import '../core/store/conversation_store.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+// Sistem talimati artik core/agent/system_prompt.dart icinde (hafiza ile
+// birlikte calisma aninda uretilir). Geriye donuk import'lar icin re-export.
+// NOT: export direktifi tum tanimlamalardan ONCE gelmeli.
+export '../core/agent/system_prompt.dart' show kBaseSystemPrompt;
 
 /// Basit cevrimici kontrolu (bulut LLM'e ulasilabiliyor mu).
 Future<bool> hasInternet() async {
@@ -24,10 +28,6 @@ Future<bool> hasInternet() async {
     return false;
   }
 }
-
-// Sistem talimati artik core/agent/system_prompt.dart icinde (hafiza ile
-// birlikte calisma aninda uretilir). Geriye donuk import'lar icin re-export.
-export '../core/agent/system_prompt.dart' show kBaseSystemPrompt;
 
 class AgentState {
   final List<Conversation> conversations;
