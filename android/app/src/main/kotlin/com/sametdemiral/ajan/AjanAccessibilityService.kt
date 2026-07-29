@@ -146,8 +146,12 @@ class AjanAccessibilityService : AccessibilityService() {
      * Asenkron; sonucu [cb] ile doner (basarisizsa bos string).
      */
     fun takeShot(cb: (String) -> Unit) {
+        takeShotInternal(cb, retriedForRate = false)
+    }
+
+    private fun takeShotInternal(cb: (String) -> Unit, retriedForRate: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            cb(""); return
+            cb("ERR:Android surumu 11'den eski (ekran goruntusu API'si yok)."); return
         }
         try {
             takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor,
@@ -159,7 +163,9 @@ class AjanAccessibilityService : AccessibilityService() {
                             val bmp = raw?.copy(Bitmap.Config.ARGB_8888, false)
                             raw?.recycle()
                             buffer.close()
-                            if (bmp == null) { cb(""); return }
+                            if (bmp == null) {
+                                cb("ERR:Goruntu donusturulemedi (donanim tamponu)."); return
+                            }
                             val scaled = scaleDown(bmp, 900)
                             val baos = ByteArrayOutputStream()
                             scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
@@ -167,17 +173,32 @@ class AjanAccessibilityService : AccessibilityService() {
                             bmp.recycle()
                             cb(Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP))
                         } catch (e: Exception) {
-                            cb("")
+                            cb("ERR:${e.message}")
                         }
                     }
 
                     override fun onFailure(errorCode: Int) {
-                        cb("")
+                        // 3 = ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT (rate limit)
+                        if (errorCode == 3 && !retriedForRate) {
+                            android.os.Handler(android.os.Looper.getMainLooper())
+                                .postDelayed({ takeShotInternal(cb, true) }, 1200)
+                            return
+                        }
+                        cb("ERR:${errorLabel(errorCode)}")
                     }
                 })
         } catch (e: Exception) {
-            cb("")
+            cb("ERR:${e.message}")
         }
+    }
+
+    private fun errorLabel(code: Int): String = when (code) {
+        1 -> "ic hata (INTERNAL_ERROR)"
+        2 -> "erisilebilirlik erisimi yok (NO_ACCESSIBILITY_ACCESS)"
+        3 -> "cok sik istek (INTERVAL_TIME_SHORT)"
+        4 -> "gecersiz ekran (INVALID_DISPLAY)"
+        5 -> "guvenli pencere - ekran goruntusu engelli (SECURE_WINDOW)"
+        else -> "kod $code"
     }
 
     private fun scaleDown(bmp: Bitmap, maxSide: Int): Bitmap {

@@ -60,8 +60,13 @@ class ScreenControlTool extends Tool {
       case 'screenshot':
         final b64 = await Automation.screenshot();
         if (b64.isEmpty) {
-          return 'Ekran goruntusu alinamadi (Android 11+ gerekir ve '
-              'erisilebilirlik acik olmali).';
+          return 'Ekran goruntusu alinamadi (bos yanit).';
+        }
+        if (b64.startsWith('ERR:')) {
+          final reason = b64.substring(4);
+          return 'Ekran goruntusu alinamadi: $reason. '
+              '"guvenli pencere" ise o uygulama (banka vb.) ekran goruntusunu '
+              'engelliyordur; metin okuma (read) ile devam et.';
         }
         // AgentLoop bu isareti gorunce goruntuyu modele gorsel olarak iletir.
         return 'IMG::$b64';

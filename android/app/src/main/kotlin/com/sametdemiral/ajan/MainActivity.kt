@@ -157,7 +157,7 @@ class MainActivity : FlutterActivity() {
                     "screenshot" -> {
                         val svc = AjanAccessibilityService.instance
                         if (svc == null) {
-                            result.success("")
+                            result.success("ERR:erisilebilirlik servisi kapali")
                         } else {
                             svc.takeShot { b64 -> main.post { result.success(b64) } }
                         }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -119,7 +120,7 @@ class HttpRetry {
       try {
         final res = await http
             .post(url, headers: headers, body: body)
-            .timeout(const Duration(seconds: 60));
+            .timeout(const Duration(seconds: 90));
 
         if (res.statusCode >= 500 || res.statusCode == 429) {
           lastErr = 'API ${res.statusCode}';
@@ -133,6 +134,10 @@ class HttpRetry {
           );
         }
         return parse(jsonDecode(res.body) as Map<String, dynamic>);
+      } on TimeoutException catch (e) {
+        // Yavas/buyuk istek: hata verme, tekrar dene.
+        lastErr = e;
+        await _backoff(attempt);
       } on SocketException catch (e) {
         lastErr = e;
         await _backoff(attempt);
