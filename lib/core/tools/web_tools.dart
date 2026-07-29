@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../agent/llm_client.dart';
+import '../settings.dart';
 import 'tool.dart';
 
 const _ua =
@@ -22,17 +24,18 @@ String _stripHtml(String s) {
   return out.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
-/// Internette arama yapar (anahtarsiz; DuckDuckGo web sonuclari).
+/// Internette arama. Once Gemini'nin SUNUCU TARAFI Google aramasini (grounding)
+/// dener (kaliteli/guncel); Gemini anahtari yoksa anahtarsiz DuckDuckGo'ya duser.
 class WebSearchTool extends Tool {
   @override
   String get name => 'web_search';
 
   @override
   String get description =>
-      'Internette arama yapar ve en iyi sonuclari (baslik, adres, ozet) '
-      'dondurur. Guncel bilgi, haber, fiyat, "nedir/kimdir", arastirma gibi '
-      'seyler icin kullan. Detay gerekiyorsa donen adreslerden birini '
-      'fetch_url ile ac ve icerigini oku.';
+      'Internette GUNCEL bilgi arar (Google tabanli). Haber, fiyat, hava '
+      'durumu, "nedir/kimdir", son gelismeler gibi guncel olabilecek her seyde '
+      'tahmin etme, BUNU kullan. Kaynak adresleriyle birlikte ozet doner; '
+      'daha fazla detay icin bir adresi fetch_url ile acabilirsin.';
 
   @override
   Map<String, dynamic> get parameters => {
@@ -47,6 +50,12 @@ class WebSearchTool extends Tool {
   Future<String> run(Map<String, dynamic> args) async {
     final q = (args['query'] ?? '').toString().trim();
     if (q.isEmpty) return 'HATA: bos sorgu.';
+
+    // 1) Gemini sunucu tarafi Google aramasi (grounding).
+    final grounded = await _geminiGrounded(q);
+    if (grounded.isNotEmpty) return grounded;
+
+    // 2) Yedek: anahtarsiz DuckDuckGo.
     try {
       final res = await http
           .post(
@@ -86,6 +95,70 @@ class WebSearchTool extends Tool {
       return sb.toString().trim();
     } catch (e) {
       return 'Arama hatasi: $e';
+    }
+  }
+
+  /// Gemini'nin sunucu tarafi Google aramasi (grounding) ile guncel yanit +
+  /// kaynaklar. Ayri bir istek oldugu icin ana ajanin araclariyla cakismaz.
+  Future<String> _geminiGrounded(String query) async {
+    try {
+      final s = await AppSettings.load();
+      final key = s.apiKeys[LlmProvider.gemini] ?? '';
+      if (key.trim().isEmpty) return '';
+      var model = s.models[LlmProvider.gemini] ?? '';
+      if (model.trim().isEmpty) model = 'gemini-2.5-flash';
+
+      final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/'
+          '$model:generateContent?key=$key');
+      final body = jsonEncode({
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': query}
+            ]
+          }
+        ],
+        'tools': [
+          {'google_search': <String, dynamic>{}}
+        ],
+        'generationConfig': {'temperature': 0.2},
+      });
+      final res = await http
+          .post(url, headers: {'Content-Type': 'application/json'}, body: body)
+          .timeout(const Duration(seconds: 45));
+      if (res.statusCode != 200) return '';
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final cands = data['candidates'] as List?;
+      if (cands == null || cands.isEmpty) return '';
+      final cand = cands.first as Map;
+      final parts = (cand['content']?['parts'] as List?) ?? const [];
+      final sb = StringBuffer();
+      for (final p in parts) {
+        if (p is Map && p['text'] != null) sb.write(p['text']);
+      }
+      var out = sb.toString().trim();
+      if (out.isEmpty) return '';
+      // Kaynaklari ekle (grounding metadata).
+      final gm = cand['groundingMetadata'] as Map?;
+      final chunks = gm?['groundingChunks'] as List?;
+      if (chunks != null && chunks.isNotEmpty) {
+        final srcs = StringBuffer('\n\nKaynaklar:');
+        var n = 0;
+        for (final c in chunks) {
+          if (n >= 5) break;
+          final web = (c as Map)['web'] as Map?;
+          if (web != null) {
+            srcs.write('\n- ${web['title'] ?? ''}: ${web['uri'] ?? ''}');
+            n++;
+          }
+        }
+        if (n > 0) out += srcs.toString();
+      }
+      return out;
+    } catch (_) {
+      return '';
     }
   }
 
