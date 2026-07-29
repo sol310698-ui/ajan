@@ -7,7 +7,7 @@ import '../core/agent/agent_loop.dart';
 import '../core/agent/llm_client.dart';
 import '../core/agent/system_prompt.dart';
 import '../core/agent/tool_registry.dart';
-import '../core/local/local_model_store.dart';
+import '../core/local/gemma_engine.dart';
 import '../core/native/native_tools.dart';
 import '../core/settings.dart';
 import '../core/store/conversation_store.dart';
@@ -161,31 +161,30 @@ class AgentNotifier extends StateNotifier<AgentState> {
     final cur = state.current;
     if (cur == null) return '';
 
-    // Etkin saglayici/model coz: cevrimdisiysa ve yerel model varsa yerele dus.
+    // Etkin saglayici/model coz: cevrimdisiysa ve offline model KURULUYSA
+    // (flutter_gemma) yerele dus.
     var provider = settings.provider;
-    var apiKey = settings.apiKey;
-    var model = settings.model;
+    final apiKey = settings.apiKey;
+    final model = settings.model;
     final googleSearch = settings.googleSearch;
     var chatOnly = false;
+    final gemmaReady = await gemmaEngine.isInstalled();
 
     if (provider == LlmProvider.local) {
-      model = await LocalModelStore().activeModelPath();
       chatOnly = true;
     } else if (!settings.hasKey || !await hasInternet()) {
-      final localPath = await LocalModelStore().activeModelPath();
-      if (localPath.isNotEmpty) {
+      if (gemmaReady) {
         provider = LlmProvider.local;
-        model = localPath;
         chatOnly = true;
       }
     }
 
     final ready =
-        provider == LlmProvider.local ? model.isNotEmpty : settings.hasKey;
+        provider == LlmProvider.local ? gemmaReady : settings.hasKey;
     if (!ready) {
       final msg = provider == LlmProvider.local
-          ? 'Yerel model yok. "Yerel modeller"den bir model indir.'
-          : 'Once ayarlardan API anahtarini gir (veya bir yerel model indir).';
+          ? 'Offline model kurulu degil. "Yerel modeller" > Offline motor > indir & kur.'
+          : 'Once ayarlardan API anahtarini gir (veya offline model kur).';
       cur.messages = [
         ...cur.messages,
         ChatMessage(role: Role.assistant, text: msg),

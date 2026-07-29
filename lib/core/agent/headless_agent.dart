@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import '../../models/chat_message.dart';
-import '../local/local_model_store.dart';
+import '../local/gemma_engine.dart';
 import '../settings.dart';
 import 'agent_loop.dart';
 import 'llm_client.dart';
@@ -30,25 +30,23 @@ Future<String> runAgentOnce(
   final settings = await AppSettings.load();
 
   var provider = settings.provider;
-  var model = settings.model;
+  final model = settings.model;
   var chat = chatOnly;
+  final gemmaReady = await gemmaEngine.isInstalled();
 
   if (provider == LlmProvider.local) {
-    model = await LocalModelStore().activeModelPath();
     chat = true;
   } else if (!settings.hasKey || !await _hasInternet()) {
-    final p = await LocalModelStore().activeModelPath();
-    if (p.isNotEmpty) {
+    if (gemmaReady) {
       provider = LlmProvider.local;
-      model = p;
       chat = true;
     }
   }
 
   final ready =
-      provider == LlmProvider.local ? model.isNotEmpty : settings.hasKey;
+      provider == LlmProvider.local ? gemmaReady : settings.hasKey;
   if (!ready) {
-    return 'API anahtari yok ve yerel model de yok; calistirilamadi.';
+    return 'API anahtari yok ve offline model de kurulu degil; calistirilamadi.';
   }
 
   final llm = LlmClient.create(
