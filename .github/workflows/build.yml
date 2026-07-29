@@ -73,6 +73,81 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
+      # key.properties varsa (yani imza secret'lari eklenmisse) release
+      # imzalamayi build.gradle'a enjekte et. Secret yoksa bu adim atlanir ve
+      # build eskisi gibi debug imzayla yesil kalir.
+      - name: Imzalama yapilandirmasini enjekte et
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not os.path.exists("android/key.properties"):
+              print("key.properties yok -> imzalama atlandi (debug imza).")
+              raise SystemExit(0)
+
+          groovy = "android/app/build.gradle"
+          kts = "android/app/build.gradle.kts"
+          path = groovy if os.path.exists(groovy) else (kts if os.path.exists(kts) else None)
+          if path is None:
+              print("build.gradle bulunamadi!"); raise SystemExit(1)
+
+          src = open(path, encoding="utf-8").read()
+          if "ajanReleaseSigning" in src:
+              print("zaten imzali yapilandirilmis."); raise SystemExit(0)
+
+          is_kts = path.endswith(".kts")
+          idx = src.find("android {")
+          if idx == -1:
+              print("android bloku bulunamadi!"); raise SystemExit(1)
+
+          if is_kts:
+              loader = (
+                  '\n// ajanReleaseSigning\n'
+                  'val keystoreProperties = java.util.Properties()\n'
+                  'val keystorePropertiesFile = rootProject.file("key.properties")\n'
+                  'if (keystorePropertiesFile.exists()) { keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) } }\n'
+              )
+              signing = (
+                  '\n    signingConfigs {\n'
+                  '        create("release") {\n'
+                  '            storeFile = file(keystoreProperties["storeFile"] as String)\n'
+                  '            storePassword = keystoreProperties["storePassword"] as String\n'
+                  '            keyAlias = keystoreProperties["keyAlias"] as String\n'
+                  '            keyPassword = keystoreProperties["keyPassword"] as String\n'
+                  '        }\n'
+                  '    }\n'
+              )
+              src = src[:idx] + loader + src[idx:]
+              idx = src.find("android {") + len("android {")
+              src = src[:idx] + signing + src[idx:]
+              src = src.replace('signingConfig = signingConfigs.getByName("debug")',
+                                'signingConfig = signingConfigs.getByName("release")')
+          else:
+              loader = (
+                  '\n// ajanReleaseSigning\n'
+                  'def keystoreProperties = new Properties()\n'
+                  'def keystorePropertiesFile = rootProject.file("key.properties")\n'
+                  'if (keystorePropertiesFile.exists()) { keystorePropertiesFile.withInputStream { keystoreProperties.load(it) } }\n'
+              )
+              signing = (
+                  '\n    signingConfigs {\n'
+                  '        release {\n'
+                  '            storeFile file(keystoreProperties["storeFile"])\n'
+                  '            storePassword keystoreProperties["storePassword"]\n'
+                  '            keyAlias keystoreProperties["keyAlias"]\n'
+                  '            keyPassword keystoreProperties["keyPassword"]\n'
+                  '        }\n'
+                  '    }\n'
+              )
+              src = src[:idx] + loader + src[idx:]
+              idx = src.find("android {") + len("android {")
+              src = src[:idx] + signing + src[idx:]
+              src = src.replace("signingConfig signingConfigs.debug",
+                                "signingConfig signingConfigs.release")
+
+          open(path, "w", encoding="utf-8").write(src)
+          print("Release imzalama enjekte edildi:", path)
+          PY
+
       - name: APK uret (arm64)
         run: flutter build apk --release --target-platform android-arm64
 
