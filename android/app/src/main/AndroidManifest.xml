@@ -56,7 +56,7 @@
 
     <application
         android:label="Ajan"
-        android:name="${applicationName}"
+        android:name=".AjanApplication"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

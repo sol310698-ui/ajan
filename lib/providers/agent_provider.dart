@@ -132,21 +132,29 @@ class AgentNotifier extends StateNotifier<AgentState> {
     _persist();
   }
 
-  Future<void> sendUserMessage(String text) async {
-    if (text.trim().isEmpty || state.busy) return;
+  /// Yuzen baloncuktan gelen mesaj: ANA sohbeti surdurur ve nihai metni doner.
+  Future<String> askFromOverlay(String text) async {
+    if (state.busy) {
+      return 'Ajan su an bir gorevle mesgul; bitince tekrar dene.';
+    }
+    return sendUserMessage(text);
+  }
+
+  /// Kullanici mesajini gonderir, ajan dongusunu calistirir ve nihai asistan
+  /// metnini dondurur (UI bu donusu yok sayabilir).
+  Future<String> sendUserMessage(String text) async {
+    if (text.trim().isEmpty || state.busy) return '';
     final cur = state.current;
-    if (cur == null) return;
+    if (cur == null) return '';
 
     if (!settings.hasKey) {
+      const msg = 'Once ayarlardan API anahtarini gir.';
       cur.messages = [
         ...cur.messages,
-        ChatMessage(
-          role: Role.assistant,
-          text: 'Once ayarlardan (${settings.provider.label}) API anahtarini gir.',
-        )
+        ChatMessage(role: Role.assistant, text: msg),
       ];
       state = state.copyWith(conversations: [...state.conversations]);
-      return;
+      return msg;
     }
 
     cur.messages = [...cur.messages, ChatMessage(role: Role.user, text: text)];
@@ -169,17 +177,22 @@ class AgentNotifier extends StateNotifier<AgentState> {
       maxSteps: 30,
     );
 
+    var finalText = '';
     final history = List<ChatMessage>.from(cur.messages);
     try {
       await loop.run(
         history,
-        onEvent: (_) {
+        onEvent: (m) {
+          if (m.role == Role.assistant && m.text.trim().isNotEmpty) {
+            finalText = m.text.trim();
+          }
           cur.messages = List<ChatMessage>.from(history);
           cur.updatedAt = DateTime.now();
           state = state.copyWith(conversations: [...state.conversations]);
         },
       );
     } catch (e) {
+      finalText = 'Hata: $e';
       cur.messages = [
         ...cur.messages,
         ChatMessage(role: Role.assistant, text: 'Hata: $e')
@@ -191,6 +204,7 @@ class AgentNotifier extends StateNotifier<AgentState> {
       state = state.copyWith(busy: false);
       await _persist();
     }
+    return finalText;
   }
 }
 

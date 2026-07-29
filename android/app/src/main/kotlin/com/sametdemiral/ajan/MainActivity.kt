@@ -38,6 +38,10 @@ class MainActivity : FlutterActivity() {
     private val channel = "ajan/native"
     private val main = Handler(Looper.getMainLooper())
 
+    // Onbellege alinmis paylasimli motoru kullan (baloncukla ayni ajan/durum).
+    override fun getCachedEngineId(): String = AjanApplication.ENGINE_ID
+    override fun shouldDestroyEngineWithHost(): Boolean = false
+
     private val pending = HashMap<Int, MethodChannel.Result>()
     private val timeouts = HashMap<Int, Runnable>()
     private val idGen = AtomicInteger(1000)

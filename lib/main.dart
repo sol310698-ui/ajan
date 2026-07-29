@@ -2,29 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/agent/headless_agent.dart';
 import 'core/app_nav.dart';
+import 'providers/agent_provider.dart';
 import 'providers/routine_provider.dart';
 import 'ui/chat_screen.dart';
 import 'ui/theme.dart';
 
+/// Uygulama ve yuzen baloncuk AYNI motoru/durumu paylassin diye global kap.
+final ProviderContainer appContainer = ProviderContainer();
+
 void main() {
-  runApp(const ProviderScope(child: AjanApp()));
+  WidgetsFlutterBinding.ensureInitialized();
+  _setupOverlayChannel();
+  runApp(UncontrolledProviderScope(
+    container: appContainer,
+    child: const AjanApp(),
+  ));
 }
 
-/// Yuzen baloncuk (overlay) icin ayri, basssiz giris noktasi. Native
-/// OverlayService bu motoru calistirir ve 'ajan/overlay' kanalindan
-/// 'ask' cagirir; biz sohbet-odakli ajani calistirip metni geri veririz.
-@pragma('vm:entry-point')
-void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  const ch = MethodChannel('ajan/overlay');
+/// Yuzen baloncuktan (native OverlayService) gelen mesajlari ANA ajana iletir.
+/// Boylece kullanici uygulamaya donmeden, ayni sohbette gorevi yonlendirebilir.
+void _setupOverlayChannel() {
+  const ch = MethodChannel('ajan/overlay_in');
   ch.setMethodCallHandler((call) async {
     if (call.method == 'ask') {
       final prompt = (call.arguments as String?)?.trim() ?? '';
       if (prompt.isEmpty) return '';
       try {
-        return await runAgentOnce(prompt, maxSteps: 10, chatOnly: true);
+        return await appContainer
+            .read(agentProvider.notifier)
+            .askFromOverlay(prompt);
       } catch (e) {
         return 'Hata: $e';
       }
@@ -38,8 +45,7 @@ class AjanApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Rutin zamanlayicisini uygulama acilir acilmaz baslat (vadesi gelen
-    // otonom gorevler arka planda calissin).
+    // Rutin zamanlayicisini uygulama acilir acilmaz baslat.
     ref.watch(routineProvider);
 
     return MaterialApp(

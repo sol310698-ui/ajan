@@ -17,11 +17,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import io.flutter.FlutterInjector
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugins.GeneratedPluginRegistrant
 import kotlin.math.abs
 
 /**
@@ -34,7 +31,6 @@ class OverlayService : Service() {
     private var bubble: View? = null
     private var panel: View? = null
 
-    private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
 
     private var responseView: TextView? = null
@@ -230,6 +226,10 @@ class OverlayService : Service() {
     private fun ask() {
         val text = inputView?.text?.toString()?.trim() ?: ""
         if (text.isEmpty()) return
+        if (channel == null) {
+            responseView?.text = "Uygulama motoru hazir degil; uygulamayi bir kez ac ve tekrar dene."
+            return
+        }
         inputView?.setText("")
         responseView?.text = "Dusunuyorum..."
         sendBtn?.isEnabled = false
@@ -249,23 +249,14 @@ class OverlayService : Service() {
         })
     }
 
-    // --- Basssiz Flutter motoru ---
+    // --- Paylasimli (onbellekteki) motora baglan ---
 
     private fun ensureEngine() {
-        if (engine != null) return
-        try {
-            val loader = FlutterInjector.instance().flutterLoader()
-            loader.startInitialization(applicationContext)
-            loader.ensureInitializationComplete(applicationContext, null)
-            val eng = FlutterEngine(applicationContext)
-            GeneratedPluginRegistrant.registerWith(eng)
-            eng.dartExecutor.executeDartEntrypoint(
-                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "overlayMain")
-            )
-            channel = MethodChannel(eng.dartExecutor.binaryMessenger, "ajan/overlay")
-            engine = eng
-        } catch (e: Exception) {
-            // motor kurulamazsa panel yine acilir ama cevap veremez
+        if (channel != null) return
+        val eng = FlutterEngineCache.getInstance().get(AjanApplication.ENGINE_ID)
+        if (eng != null) {
+            // Ana uygulamayla AYNI motor -> ayni ajan/sohbet.
+            channel = MethodChannel(eng.dartExecutor.binaryMessenger, "ajan/overlay_in")
         }
     }
 
@@ -289,8 +280,8 @@ class OverlayService : Service() {
         removePanel()
         bubble?.let { runCatching { wm?.removeView(it) } }
         bubble = null
-        engine?.destroy()
-        engine = null
+        // Paylasimli motoru YOK ETME (uygulama kullaniyor); sadece referansi birak.
+        channel = null
         super.onDestroy()
     }
 
