@@ -61,10 +61,21 @@ class GemmaEngine {
   Future<String> ask(String system, List<GemmaTurn> turns) async {
     try {
       await _ensureInit();
-      _model ??= await FlutterGemma.getActiveModel(
-        maxTokens: 1024,
-        preferredBackend: PreferredBackend.gpu,
-      );
+      // GPU (OpenCL) bazi cihazlarda modeli acamiyor; once GPU dene, olmazsa
+      // CPU'ya dus (daha yavas ama her cihazda calisir).
+      if (_model == null) {
+        try {
+          _model = await FlutterGemma.getActiveModel(
+            maxTokens: 1024,
+            preferredBackend: PreferredBackend.gpu,
+          );
+        } catch (_) {
+          _model = await FlutterGemma.getActiveModel(
+            maxTokens: 1024,
+            preferredBackend: PreferredBackend.cpu,
+          );
+        }
+      }
       final chat = await _model.createChat(systemInstruction: system);
       for (final t in turns) {
         await chat.addQueryChunk(Message.text(text: t.text, isUser: t.isUser));
@@ -72,6 +83,7 @@ class GemmaEngine {
       final res = await chat.generateChatResponse();
       return res.toString().trim();
     } catch (e) {
+      _model = null; // sonraki denemede yeniden kurulsun (CPU'ya dusebilsin)
       return 'Yerel model hatasi: $e';
     }
   }
