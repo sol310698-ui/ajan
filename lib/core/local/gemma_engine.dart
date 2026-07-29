@@ -1,17 +1,89 @@
+import 'dart:convert';
+
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../log/app_log.dart';
 import '../settings.dart';
 
+/// Indirilebilir cihaz-ici model (LiteRT .task/.litertlm).
+class LiteRtModel {
+  final String id; // ornek: litert-community/Gemma3-1B-IT
+  final String fileName;
+  final String url;
+  final int sizeMb;
+  const LiteRtModel({
+    required this.id,
+    required this.fileName,
+    required this.url,
+    required this.sizeMb,
+  });
+  String get name => id.contains('/') ? id.split('/').last : id;
+}
+
 /// flutter_gemma (MediaPipe) ile offline model motoru. flutter_gemma API'sine
 /// dokunan TEK yer burasi; boylece surum degisiklikleri tek noktada yonetilir.
 class GemmaEngine {
   static const _kInstalled = 'gemma_installed';
+  static const _kActiveName = 'gemma_active_name';
   bool _initialized = false;
   String? _initedToken;
   dynamic _model;
+
+  /// HuggingFace'ten cihaz-ici (LiteRT) modelleri listeler (token'la).
+  /// litert-community deposundaki .task/.litertlm dosyali modelleri getirir.
+  Future<List<LiteRtModel>> listDownloadable() async {
+    final s = await AppSettings.load();
+    final token = s.hfToken.trim();
+    final headers = <String, String>{
+      if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+    try {
+      final res = await http.get(
+        Uri.parse('https://huggingface.co/api/models'
+            '?author=litert-community&full=true&limit=100'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) {
+        AppLog.e('model listesi HTTP ${res.statusCode}');
+        return [];
+      }
+      final list = jsonDecode(res.body) as List;
+      final out = <LiteRtModel>[];
+      for (final m in list) {
+        if (m is! Map) continue;
+        final id = (m['id'] ?? m['modelId'] ?? '').toString();
+        final siblings = (m['siblings'] as List?) ?? const [];
+        for (final sib in siblings) {
+          final f = (sib is Map ? sib['rfilename'] : '').toString();
+          if (f.endsWith('.task') || f.endsWith('.litertlm')) {
+            final size = (sib is Map && sib['size'] is num)
+                ? ((sib['size'] as num) / (1024 * 1024)).round()
+                : 0;
+            out.add(LiteRtModel(
+              id: id,
+              fileName: f,
+              url: 'https://huggingface.co/$id/resolve/main/$f',
+              sizeMb: size,
+            ));
+            break; // her modelden ilk uygun dosya yeterli
+          }
+        }
+      }
+      out.sort((a, b) => a.sizeMb.compareTo(b.sizeMb));
+      return out;
+    } catch (e) {
+      AppLog.e('model listesi hatasi: $e');
+      return [];
+    }
+  }
+
+  Future<String> activeName() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_kActiveName) ?? '';
+  }
 
   /// Onerilen offline model (LiteRT .task, HuggingFace).
   static const recommendedUrl =
@@ -49,6 +121,7 @@ class GemmaEngine {
   /// Basarili ise null; hata varsa hata mesaji doner (arayuzde gosterilir).
   Future<String?> install({
     String? url,
+    String? name,
     required void Function(double) onProgress,
   }) async {
     final target = (url == null || url.trim().isEmpty) ? recommendedUrl : url.trim();
@@ -61,6 +134,9 @@ class GemmaEngine {
         onProgress(v > 1 ? v / 100.0 : v);
       }).install();
       await _setInstalled(true);
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kActiveName, name ?? target.split('/').last);
+      _model = null; // yeni model bir sonraki ask'te yuklensin
       return null;
     } catch (e) {
       return e.toString();
