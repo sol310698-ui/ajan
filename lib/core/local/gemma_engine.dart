@@ -35,20 +35,25 @@ class GemmaEngine {
     await p.setBool(_kInstalled, v);
   }
 
-  /// Onerilen modeli agdan indirip kurar. [onProgress] 0..1.
-  Future<bool> install({required void Function(double) onProgress}) async {
+  /// Modeli agdan indirip kurar. [url] verilmezse onerilen kullanilir.
+  /// Basarili ise null; hata varsa hata mesaji doner (arayuzde gosterilir).
+  Future<String?> install({
+    String? url,
+    required void Function(double) onProgress,
+  }) async {
+    final target = (url == null || url.trim().isEmpty) ? recommendedUrl : url.trim();
     try {
       await _ensureInit();
       await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-          .fromNetwork(recommendedUrl)
+          .fromNetwork(target)
           .withProgress((p) {
         final v = (p is num) ? p.toDouble() : 0.0;
         onProgress(v > 1 ? v / 100.0 : v);
       }).install();
       await _setInstalled(true);
-      return true;
-    } catch (_) {
-      return false;
+      return null;
+    } catch (e) {
+      return e.toString();
     }
   }
 

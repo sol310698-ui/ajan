@@ -69,6 +69,8 @@ class _GemmaSectionState extends State<_GemmaSection> {
   bool _installed = false;
   bool _busy = false;
   double _progress = 0;
+  String _error = '';
+  final _urlCtrl = TextEditingController(text: GemmaEngine.recommendedUrl);
 
   @override
   void initState() {
@@ -78,23 +80,34 @@ class _GemmaSectionState extends State<_GemmaSection> {
     });
   }
 
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _install() async {
     setState(() {
       _busy = true;
       _progress = 0;
+      _error = '';
     });
-    final ok = await gemmaEngine.install(onProgress: (p) {
-      if (mounted) setState(() => _progress = p);
-    });
+    final err = await gemmaEngine.install(
+      url: _urlCtrl.text,
+      onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _installed = ok;
+      _installed = err == null;
+      _error = err ?? '';
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
+      content: Text(err == null
           ? 'Offline model kuruldu. Artik internetsiz de sohbet edebilirsin.'
-          : 'Kurulum basarisiz. HuggingFace token (Ayarlar) gerekebilir.'),
+          : 'Kurulum basarisiz. Ayrinti asagida.'),
     ));
   }
 
@@ -120,9 +133,10 @@ class _GemmaSectionState extends State<_GemmaSection> {
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           const Text(
-              'Internetsiz calisan asil model. Bir kez indir (WiFi), sonra '
-              'internet kesilince ajan otomatik buna duser. Indirmek icin '
-              'Ayarlar\'da HuggingFace token gerekebilir (ucretsiz).',
+              'Internetsiz calisan asil model. GATED model icin: (1) Ayarlar\'da '
+              'HuggingFace token gir, (2) modelin HF sayfasinda lisansi KABUL '
+              'et. Aksi halde indirme 403 verir. Kendi .task/.litertlm URL\'ni '
+              'de yapistirabilirsin.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
           const SizedBox(height: 10),
           if (_busy) ...[
@@ -146,7 +160,18 @@ class _GemmaSectionState extends State<_GemmaSection> {
                         fontWeight: FontWeight.w600)),
               ],
             )
-          else
+          else ...[
+            TextField(
+              controller: _urlCtrl,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+              maxLines: 2,
+              minLines: 1,
+              decoration: const InputDecoration(
+                labelText: 'Model URL (.task / .litertlm)',
+                labelStyle: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -155,6 +180,21 @@ class _GemmaSectionState extends State<_GemmaSection> {
                 onPressed: _install,
               ),
             ),
+          ],
+          if (_error.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0x33E74C3C),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText('Hata: $_error',
+                  style: const TextStyle(
+                      color: Color(0xFFFFB4A9), fontSize: 11.5)),
+            ),
+          ],
         ],
       ),
     );
