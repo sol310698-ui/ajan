@@ -148,6 +148,35 @@ jobs:
           print("Release imzalama enjekte edildi:", path)
           PY
 
+      # MediaPipe (flutter_gemma) R8 kod-kucultmede 'Missing class' hatasi
+      # veriyor. Yan yuklenen uygulamada minify gereksiz; release'te kapatiyoruz.
+      - name: R8/minify kapat (yerel model uyumu)
+        run: |
+          python3 - <<'PY'
+          import os, re
+          for path in ["android/app/build.gradle", "android/app/build.gradle.kts"]:
+              if not os.path.exists(path):
+                  continue
+              src = open(path, encoding="utf-8").read()
+              if "ajanNoMinify" in src:
+                  continue
+              is_kts = path.endswith(".kts")
+              bt = re.search(r"buildTypes\s*\{", src)
+              if not bt:
+                  continue
+              rel = re.search(r"release\s*\{", src[bt.end():])
+              if not rel:
+                  continue
+              pos = bt.end() + rel.end()
+              if is_kts:
+                  ins = "\n            isMinifyEnabled = false\n            isShrinkResources = false // ajanNoMinify\n"
+              else:
+                  ins = "\n            minifyEnabled false\n            shrinkResources false // ajanNoMinify\n"
+              src = src[:pos] + ins + src[pos:]
+              open(path, "w", encoding="utf-8").write(src)
+              print("R8/minify kapatildi:", path)
+          PY
+
       - name: APK uret (arm64)
         run: flutter build apk --release --target-platform android-arm64
 
