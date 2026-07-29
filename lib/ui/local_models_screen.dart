@@ -28,10 +28,10 @@ class LocalModelsScreen extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 4, 4, 12),
             child: Text(
-              'Internet olmadan calisan modeller (GPU, int4 - telefon donmaz). '
-              'WiFi ile indir, "Aktif yap". Internet kesilince ajan otomatik '
-              'bu modele duser; ayrica Ayarlar\'dan saglayici "Yerel (offline)" '
-              'secilirse hep bunu kullanir.',
+              'Offline modeller (int4). WiFi ile indir, "Aktif yap".\n'
+              'Not: Calistirma motoru bu surumde bundlanmadi (llama.cpp APK\'yi '
+              'cok buyutuyordu). Indirme/yonetim calisir; motor daha hafif bir '
+              'cozumle yakinda baglanacak.',
               style: TextStyle(color: AppColors.textFaint, fontSize: 12.5),
             ),
           ),
