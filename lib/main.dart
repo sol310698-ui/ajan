@@ -24,7 +24,7 @@ void main() {
       AppLog.e('FlutterError: ${details.exceptionAsString()}');
       FlutterError.presentError(details);
     };
-    PlatformDispatcher.instance.onError = (error, stack) {
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
       AppLog.e('PlatformError: $error');
       return true;
     };
