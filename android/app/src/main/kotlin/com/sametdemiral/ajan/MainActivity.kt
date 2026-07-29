@@ -242,6 +242,11 @@ class MainActivity : FlutterActivity() {
                         call.argument<Int>("id") ?: -1,
                         call.argument<Boolean>("enabled") ?: true
                     ))
+                    "permStatus" -> result.success(permStatus())
+                    "openPerm" -> {
+                        openPerm(call.argument<String>("which") ?: "")
+                        result.success("ok")
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -633,6 +638,72 @@ class MainActivity : FlutterActivity() {
             "ayar acilamadi: ${e.message}"
         }
     }
+
+    // --- Izin durumu / isteme (alarm uygulamasi izinleri) ---
+
+    private fun permStatus(): String {
+        val exactAlarm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+        } else true
+        val battery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            (getSystemService(Context.POWER_SERVICE) as PowerManager)
+                .isIgnoringBatteryOptimizations(packageName)
+        } else true
+        val fullScreen = if (Build.VERSION.SDK_INT >= 34) {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .canUseFullScreenIntent()
+        } else true
+        val overlay = android.provider.Settings.canDrawOverlays(this)
+        val notifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .areNotificationsEnabled()
+        } else true
+        return "{" +
+            "\"exactAlarm\":$exactAlarm," +
+            "\"battery\":$battery," +
+            "\"fullScreen\":$fullScreen," +
+            "\"overlay\":$overlay," +
+            "\"notifications\":$notifications}"
+    }
+
+    private fun openPerm(which: String) {
+        val intent = when (which) {
+            "exactAlarm" ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:$packageName"))
+                else appDetails()
+            "battery" ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName"))
+                else appDetails()
+            "fullScreen" ->
+                if (Build.VERSION.SDK_INT >= 34)
+                    Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        Uri.parse("package:$packageName"))
+                else appDetails()
+            "overlay" ->
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName"))
+            "notifications" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                else appDetails()
+            }
+            else -> appDetails()
+        }
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            runCatching { startActivity(appDetails().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
+    private fun appDetails(): Intent =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName"))
 
     private fun scheduleWake(delayMillis: Long) {
         val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager

@@ -112,6 +112,15 @@ class AlarmService : Service() {
 
         startForeground(NOTIF_ID, notif)
 
+        // Tam ekran alarm ekranini DOGRUDAN da baslat (full-screen intent bazi
+        // cihazlarda/OEM'lerde tetiklenmeyebiliyor; exact-alarm kaynakli FGS'ten
+        // activity baslatmaya izin var).
+        try {
+            startActivity(fullScreen)
+        } catch (e: Exception) {
+            // olmazsa full-screen intent + bildirim yine de gosterir
+        }
+
         if (sound) startSound()
         if (vibrate) startVibrate()
     }

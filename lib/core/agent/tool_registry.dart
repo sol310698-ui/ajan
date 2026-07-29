@@ -15,7 +15,19 @@ import '../tools/web_tools.dart';
 class ToolRegistry {
   final Map<String, Tool> _tools = {};
 
-  ToolRegistry() {
+  /// [chatOnly] true ise (yuzen baloncuk gibi native kanali OLMAYAN ortamlar)
+  /// yalnizca saf-Dart araclar (internet + hafiza) kaydedilir.
+  ToolRegistry({bool chatOnly = false}) {
+    if (chatOnly) {
+      _register([
+        WebSearchTool(),
+        FetchUrlTool(),
+        RememberTool(),
+        RecallTool(),
+        ForgetTool(),
+      ]);
+      return;
+    }
     _register([
       // Cekirdek
       ShellTool(),

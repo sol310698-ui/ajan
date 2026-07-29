@@ -8,10 +8,14 @@ import 'tool_registry.dart';
 /// Tek bir istegi (prompt) ajan dongusunden gecirir ve nihai metni dondurur.
 ///
 /// Sohbet arayuzunden bagimsizdir; rutinler / arka plan gorevleri bunu kullanir.
-Future<String> runAgentOnce(String prompt, {int maxSteps = 20}) async {
+Future<String> runAgentOnce(
+  String prompt, {
+  int maxSteps = 20,
+  bool chatOnly = false,
+}) async {
   final settings = await AppSettings.load();
   if (!settings.hasKey) {
-    return 'API anahtari ayarli degil; rutin calistirilamadi.';
+    return 'API anahtari ayarli degil.';
   }
 
   final llm = LlmClient.create(
@@ -22,7 +26,7 @@ Future<String> runAgentOnce(String prompt, {int maxSteps = 20}) async {
   );
   final loop = AgentLoop(
     llm: llm,
-    registry: ToolRegistry(),
+    registry: ToolRegistry(chatOnly: chatOnly),
     systemPrompt: await buildSystemPrompt(),
     maxSteps: maxSteps,
   );

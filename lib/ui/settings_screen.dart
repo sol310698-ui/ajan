@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +22,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _modelCtrl = TextEditingController();
   List<String> _models = [];
   bool _loading = false;
+  Map<String, bool> _perms = {};
 
   @override
   void initState() {
@@ -27,6 +30,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final s = ref.read(agentProvider.notifier).settings;
     _keyCtrl.text = s.apiKey;
     _modelCtrl.text = s.model;
+    _loadPerms();
+  }
+
+  Future<void> _loadPerms() async {
+    try {
+      final raw = await Automation.permStatus();
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() =>
+          _perms = m.map((k, v) => MapEntry(k, v == true)));
+    } catch (_) {}
+  }
+
+  Future<void> _requestPerm(String which) async {
+    await Automation.openPerm(which);
+    // Kullanici ayar ekranindan donunce durumu tazele.
+    await Future.delayed(const Duration(milliseconds: 400));
+    await _loadPerms();
   }
 
   @override
@@ -86,6 +107,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 letterSpacing: 1.2,
                 fontWeight: FontWeight.w700)),
       );
+
+  Widget _permRow(String label, String key) {
+    final granted = _perms[key] == true;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(granted ? Icons.check_circle : Icons.error_outline,
+              size: 18,
+              color: granted ? AppColors.success : Colors.amberAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontSize: 13)),
+          ),
+          if (!granted)
+            TextButton(
+              onPressed: () => _requestPerm(key),
+              child: const Text('Ver'),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Text('Verildi',
+                  style: TextStyle(
+                      color: AppColors.success, fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _card({required Widget child}) => Container(
         width: double.infinity,
@@ -259,6 +312,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: const Text('Dene'),
                     onPressed: () => vc.speak(
                         'Merhaba, ben senin ajaninim. Bu bir hiz denemesi.'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _sectionTitle('Alarm & sistem izinleri'),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                    'Alarmin kilit ekraninda tam ekran cikmasi ve uygulama '
+                    'kapaliyken calmasi icin bu izinler gerekir.',
+                    style: TextStyle(
+                        color: AppColors.textSecondary, fontSize: 12)),
+                const SizedBox(height: 6),
+                _permRow('Tam zamanli alarm (exact alarm)', 'exactAlarm'),
+                _permRow('Pil optimizasyonundan muaf', 'battery'),
+                _permRow('Tam ekran bildirim (alarm ekrani)', 'fullScreen'),
+                _permRow('Diger uygulamalarin uzerinde goster', 'overlay'),
+                _permRow('Bildirimler', 'notifications'),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Durumu yenile'),
+                    onPressed: _loadPerms,
                   ),
                 ),
               ],

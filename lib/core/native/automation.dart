@@ -40,4 +40,13 @@ class Automation {
 
   static Future<String> overlayStop() async =>
       await _ch.invokeMethod<String>('overlayStop') ?? 'ok';
+
+  /// Alarm/uygulama izinlerinin durumu (JSON: exactAlarm, battery, fullScreen,
+  /// overlay, notifications).
+  static Future<String> permStatus() async =>
+      await _ch.invokeMethod<String>('permStatus') ?? '{}';
+
+  /// Ilgili izin ayar ekranini acar.
+  static Future<void> openPerm(String which) async =>
+      await _ch.invokeMethod('openPerm', {'which': which});
 }
