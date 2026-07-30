@@ -17,9 +17,10 @@ dependencies:
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.0
   path_provider: ^2.1.4
-  # Yerel (offline) model motoru: MediaPipe (hazir AAR, GPU).
+  # Yerel (offline) model motoru: MediaPipe (.task/.bin) + LiteRT-LM (.litertlm)
   flutter_gemma: ^1.4.1
   flutter_gemma_mediapipe: ^1.0.4
+  flutter_gemma_litertlm: ^1.3.1
 
 dev_dependencies:
   flutter_lints: ^4.0.0

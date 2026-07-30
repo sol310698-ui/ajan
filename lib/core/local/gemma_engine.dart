@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -96,8 +97,9 @@ class GemmaEngine {
     if (_initialized && _initedToken == token) return;
     AppLog.i('gemma init: token ${token == null ? "YOK" : "var(${token.length})"}');
     try {
+      // .task/.bin -> MediaPipe, .litertlm -> LiteRT-LM. Ikisini de kaydet.
       await FlutterGemma.initialize(
-        inferenceEngines: [MediaPipeEngine()],
+        inferenceEngines: [MediaPipeEngine(), LiteRtLmEngine()],
         huggingFaceToken: token,
       );
     } catch (e) {
