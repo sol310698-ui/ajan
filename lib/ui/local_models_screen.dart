@@ -109,9 +109,10 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           const Text(
-            'Offline (internetsiz) calisan modeller. Indirmek icin Ayarlar\'da '
-            'HuggingFace token gir ve modelin HF sayfasinda lisansi kabul et. '
-            'Kucuk model = hizli ama basit; buyuk = akilli ama yavas/cok RAM.',
+            'Offline (internetsiz) calisan modeller (.task). Indirmek icin '
+            'Ayarlar\'da HuggingFace token gir ve modelin HF sayfasinda lisansi '
+            'kabul et. Kucuk = hizli/basit, buyuk = akilli ama yavas/cok RAM. '
+            'Not: .litertlm modeller bu surumde desteklenmiyor; sadece .task.',
             style: TextStyle(color: AppColors.textFaint, fontSize: 12.5),
           ),
           const SizedBox(height: 12),

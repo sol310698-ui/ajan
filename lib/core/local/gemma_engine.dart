@@ -33,7 +33,6 @@ class GemmaEngine {
   static const _kActiveName = 'gemma_active_name';
   bool _initialized = false;
   String? _initedToken;
-  String? _initedEngine; // 'litertlm' | 'mediapipe'
   dynamic _model;
 
   /// HuggingFace'ten cihaz-ici (LiteRT) modelleri listeler (token'la).
@@ -62,7 +61,9 @@ class GemmaEngine {
         final siblings = (m['siblings'] as List?) ?? const [];
         for (final sib in siblings) {
           final f = (sib is Map ? sib['rfilename'] : '').toString();
-          if (f.endsWith('.task') || f.endsWith('.litertlm')) {
+          // Yalnizca Android .task (web-only '-web.task' haric). Bu surumde
+          // .litertlm yerel yuklemede yanlis motora gidiyor, onu sunmuyoruz.
+          if (f.endsWith('.task') && !f.contains('-web')) {
             final size = (sib is Map && sib['size'] is num)
                 ? ((sib['size'] as num) / (1024 * 1024)).round()
                 : 0;
@@ -93,24 +94,18 @@ class GemmaEngine {
   static const recommendedUrl =
       'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q8_ekv1280.task';
 
-  /// [forFile] verilirse o dosyanin uzantisina, yoksa AKTIF modele gore dogru
-  /// motoru kaydeder. Iki motoru birlikte kaydedince flutter_gemma yerel
-  /// dosyalari yanlis motora yonlendiriyor; bu yuzden TEK, dogru motoru kurariz.
+  /// Her iki motoru da kaydeder (MediaPipe .task/.bin, LiteRtLm .litertlm).
+  /// Not: bu surumde .litertlm YEREL dosyalari yanlis motora yonlendiriliyor,
+  /// bu yuzden listede yalnizca .task modelleri sunuyoruz.
   Future<void> _ensureInit({String? forFile}) async {
     final s = await AppSettings.load();
     final token = s.hfToken.trim().isEmpty ? null : s.hfToken.trim();
-    final ref = forFile ?? await activeName();
-    final needLitert = ref.toLowerCase().endsWith('.litertlm');
-    final engineKey = needLitert ? 'litertlm' : 'mediapipe';
-
-    if (_initialized && _initedToken == token && _initedEngine == engineKey) {
-      return;
-    }
-    AppLog.i('gemma init: motor=$engineKey, token '
+    if (_initialized && _initedToken == token) return;
+    AppLog.i('gemma init: token '
         '${token == null ? "YOK" : "var(${token.length})"}');
     try {
       await FlutterGemma.initialize(
-        inferenceEngines: needLitert ? [LiteRtLmEngine()] : [MediaPipeEngine()],
+        inferenceEngines: [MediaPipeEngine(), LiteRtLmEngine()],
         huggingFaceToken: token,
       );
     } catch (e) {
@@ -118,8 +113,7 @@ class GemmaEngine {
     }
     _initialized = true;
     _initedToken = token;
-    _initedEngine = engineKey;
-    _model = null; // motor degistiyse model yeniden yuklensin
+    _model = null;
   }
 
   Future<bool> isInstalled() async {
