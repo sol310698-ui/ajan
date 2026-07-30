@@ -33,6 +33,7 @@ class GemmaEngine {
   static const _kActiveName = 'gemma_active_name';
   bool _initialized = false;
   String? _initedToken;
+  String? _initedEngine; // 'litertlm' | 'mediapipe'
   dynamic _model;
 
   /// HuggingFace'ten cihaz-ici (LiteRT) modelleri listeler (token'la).
@@ -92,16 +93,24 @@ class GemmaEngine {
   static const recommendedUrl =
       'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q8_ekv1280.task';
 
-  Future<void> _ensureInit() async {
+  /// [forFile] verilirse o dosyanin uzantisina, yoksa AKTIF modele gore dogru
+  /// motoru kaydeder. Iki motoru birlikte kaydedince flutter_gemma yerel
+  /// dosyalari yanlis motora yonlendiriyor; bu yuzden TEK, dogru motoru kurariz.
+  Future<void> _ensureInit({String? forFile}) async {
     final s = await AppSettings.load();
     final token = s.hfToken.trim().isEmpty ? null : s.hfToken.trim();
-    // Token degistiyse motoru YENIDEN baslat (onceki token'siz init'e takilma).
-    if (_initialized && _initedToken == token) return;
-    AppLog.i('gemma init: token ${token == null ? "YOK" : "var(${token.length})"}');
+    final ref = forFile ?? await activeName();
+    final needLitert = ref.toLowerCase().endsWith('.litertlm');
+    final engineKey = needLitert ? 'litertlm' : 'mediapipe';
+
+    if (_initialized && _initedToken == token && _initedEngine == engineKey) {
+      return;
+    }
+    AppLog.i('gemma init: motor=$engineKey, token '
+        '${token == null ? "YOK" : "var(${token.length})"}');
     try {
-      // .task/.bin -> MediaPipe, .litertlm -> LiteRT-LM. Ikisini de kaydet.
       await FlutterGemma.initialize(
-        inferenceEngines: [MediaPipeEngine(), LiteRtLmEngine()],
+        inferenceEngines: needLitert ? [LiteRtLmEngine()] : [MediaPipeEngine()],
         huggingFaceToken: token,
       );
     } catch (e) {
@@ -109,6 +118,8 @@ class GemmaEngine {
     }
     _initialized = true;
     _initedToken = token;
+    _initedEngine = engineKey;
+    _model = null; // motor degistiyse model yeniden yuklensin
   }
 
   Future<bool> isInstalled() async {
@@ -132,7 +143,6 @@ class GemmaEngine {
     final target =
         (url == null || url.trim().isEmpty) ? recommendedUrl : url.trim();
     try {
-      await _ensureInit();
       final s = await AppSettings.load();
       AppLog.i('gemma.install: indiriliyor $target');
       final localPath = await _downloadWithToken(
@@ -140,6 +150,8 @@ class GemmaEngine {
         s.hfToken.trim(),
         onProgress,
       );
+      // Indirilen dosyanin uzantisina gore DOGRU motoru kaydet.
+      await _ensureInit(forFile: localPath);
       AppLog.i('gemma.install: yerel dosyadan kuruluyor');
       await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
           .fromFile(localPath)
