@@ -177,8 +177,11 @@ class GemmaEngine {
     final client = http.Client();
     try {
       final req = http.Request('GET', Uri.parse(url));
+      req.followRedirects = true;
+      req.maxRedirects = 10;
       if (token.isNotEmpty) req.headers['Authorization'] = 'Bearer $token';
       final res = await client.send(req);
+      AppLog.i('indirme: HTTP ${res.statusCode}, boyut=${res.contentLength}');
       if (res.statusCode != 200) {
         throw 'indirme HTTP ${res.statusCode} (token/lisans?)';
       }
@@ -191,6 +194,24 @@ class GemmaEngine {
         if (total > 0) onProgress(received / total);
       }
       await sink.close();
+      final len = await file.length();
+      AppLog.i('indirme bitti: dosya=$len bayt');
+
+      // Butunluk: .task bir ZIP'tir -> ilk 2 bayt 'PK' olmali. Degilse
+      // muhtemelen HTML hata sayfasi / LFS pointer / yarim indi.
+      final head = await file.openRead(0, 8).first;
+      final isZip = head.length >= 2 && head[0] == 0x50 && head[1] == 0x4B;
+      if (!isZip) {
+        final preview = String.fromCharCodes(head);
+        await file.delete();
+        AppLog.e('indirilen dosya gecersiz (zip degil). Bas: "$preview"');
+        throw 'Indirilen dosya gecerli model degil (zip degil, $len bayt). '
+            'Token/lisans ya da URL yanlis olabilir.';
+      }
+      if (total > 0 && len < total) {
+        AppLog.e('yarim indi: $len/$total');
+        throw 'Indirme yarim kaldi ($len/$total bayt). Tekrar dene.';
+      }
       return file.path;
     } finally {
       client.close();
