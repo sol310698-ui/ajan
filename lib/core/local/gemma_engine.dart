@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../log/app_log.dart';
@@ -119,29 +121,73 @@ class GemmaEngine {
     await p.setBool(_kInstalled, v);
   }
 
-  /// Modeli agdan indirip kurar. [url] verilmezse onerilen kullanilir.
-  /// Basarili ise null; hata varsa hata mesaji doner (arayuzde gosterilir).
+  /// Modeli kurar. flutter_gemma'nin ag indiricisi HF token'ini gonderMEDIGI
+  /// icin (gated modellerde 401), dosyayi KENDIMIZ token'la indirip yerel
+  /// dosyadan kuruyoruz. Basarili ise null; hata varsa mesaj doner.
   Future<String?> install({
     String? url,
     String? name,
     required void Function(double) onProgress,
   }) async {
-    final target = (url == null || url.trim().isEmpty) ? recommendedUrl : url.trim();
+    final target =
+        (url == null || url.trim().isEmpty) ? recommendedUrl : url.trim();
     try {
       await _ensureInit();
+      final s = await AppSettings.load();
+      AppLog.i('gemma.install: indiriliyor $target');
+      final localPath = await _downloadWithToken(
+        target,
+        s.hfToken.trim(),
+        onProgress,
+      );
+      AppLog.i('gemma.install: yerel dosyadan kuruluyor');
       await FlutterGemma.installModel(modelType: ModelType.gemmaIt)
-          .fromNetwork(target)
-          .withProgress((p) {
-        final v = (p is num) ? p.toDouble() : 0.0;
-        onProgress(v > 1 ? v / 100.0 : v);
-      }).install();
+          .fromFile(localPath)
+          .install();
       await _setInstalled(true);
       final p = await SharedPreferences.getInstance();
       await p.setString(_kActiveName, name ?? target.split('/').last);
       _model = null; // yeni model bir sonraki ask'te yuklensin
+      AppLog.i('gemma.install: tamam');
       return null;
     } catch (e) {
+      AppLog.e('gemma.install HATA: $e');
       return e.toString();
+    }
+  }
+
+  /// Modeli HF token'i ile (Authorization header) indirip yerel yola yazar.
+  Future<String> _downloadWithToken(
+    String url,
+    String token,
+    void Function(double) onProgress,
+  ) async {
+    final base = await getApplicationSupportDirectory();
+    final dir = Directory('${base.path}/models');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    final fileName = url.split('/').last.split('?').first;
+    final file = File('${dir.path}/$fileName');
+
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', Uri.parse(url));
+      if (token.isNotEmpty) req.headers['Authorization'] = 'Bearer $token';
+      final res = await client.send(req);
+      if (res.statusCode != 200) {
+        throw 'indirme HTTP ${res.statusCode} (token/lisans?)';
+      }
+      final total = res.contentLength ?? 0;
+      var received = 0;
+      final sink = file.openWrite();
+      await for (final chunk in res.stream) {
+        received += chunk.length;
+        sink.add(chunk);
+        if (total > 0) onProgress(received / total);
+      }
+      await sink.close();
+      return file.path;
+    } finally {
+      client.close();
     }
   }
 
